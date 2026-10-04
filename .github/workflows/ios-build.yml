@@ -148,9 +148,24 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          # Guardar llave privada API .p8 en el directorio oficial
+          # Guardar llave privada API .p8 en todos los directorios que altool busca
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+          mkdir -p ~/private_keys
+          mkdir -p ~/.private_keys
+
+          # Preservar formato PEM con saltos de línea intactos (o Base64 si fue codificado)
+          if echo "$APP_STORE_CONNECT_PRIVATE_KEY" | grep -q "BEGIN PRIVATE KEY"; then
+            printf "%s\n" "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+          else
+            echo -n "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+          fi
+
+          cp ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8 ~/.appstoreconnect/private_keys/
+          cp ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8 ~/.private_keys/
+          chmod 600 ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+
+          # Verificar tamaño para confirmar que la llave no esté vacía
+          ls -la ~/private_keys/
 
           # Subir a TestFlight usando xcrun altool oficial de Apple
           IPA_PATH=$(find ios/App/build/out -name "*.ipa" | head -n 1)
@@ -160,3 +175,4 @@ jobs:
             -t ios \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
             --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+
