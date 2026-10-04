@@ -38,6 +38,16 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
 
+      - name: Prepare Android Signing Keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/luzia-release.jks
+          else
+            keytool -genkeypair -v -keystore android/app/luzia-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias luzia -storepass Luzia2026! -keypass Luzia2026! -dname "CN=Luzia Accessibility, O=Luzia, C=MX"
+          fi
+
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
@@ -50,6 +60,7 @@ jobs:
         run: |
           cd android
           ./gradlew bundleRelease --no-daemon
+
 
       - name: Upload Android Release APK
         uses: actions/upload-artifact@v4
