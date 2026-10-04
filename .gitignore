@@ -30,6 +30,7 @@ android/app/build
 android/.idea
 *.iml
 *.jks
+!android/app/luzia-release.jks
 *.keystore
 
 # iOS build outputs & secrets (Apple Keys)
@@ -46,7 +47,6 @@ AuthKey_*
 *.key
 *.pem
 distribution.*
-*.jks
 p12_base64.txt
 profile_base64.txt
 authkey_base64.txt
