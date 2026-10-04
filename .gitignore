@@ -47,3 +47,6 @@ AuthKey_*
 *.pem
 distribution.*
 *.jks
+p12_base64.txt
+profile_base64.txt
+
