@@ -153,19 +153,31 @@ jobs:
           mkdir -p ~/private_keys
           mkdir -p ~/.private_keys
 
-          # Preservar formato PEM con saltos de línea intactos (o Base64 si fue codificado)
-          if echo "$APP_STORE_CONNECT_PRIVATE_KEY" | grep -q "BEGIN PRIVATE KEY"; then
-            printf "%s\n" "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
-          else
-            echo -n "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
-          fi
+          # Escribir la clave privada .p8 de forma robusta con Python en UTF-8 válido
+          python3 - << 'EOF'
+          import os, base64
+
+          raw = os.environ.get('APP_STORE_CONNECT_PRIVATE_KEY', '')
+          key_id = os.environ.get('APP_STORE_CONNECT_KEY_ID', '')
+          dest = os.path.expanduser(f'~/private_keys/AuthKey_{key_id}.p8')
+
+          if 'BEGIN PRIVATE KEY' in raw:
+              content = raw
+          else:
+              try:
+                  content = base64.b64decode(raw).decode('utf-8')
+              except Exception:
+                  content = raw
+
+          with open(dest, 'w', encoding='utf-8') as f:
+              f.write(content.strip() + '\n')
+          EOF
 
           cp ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8 ~/.appstoreconnect/private_keys/
           cp ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8 ~/.private_keys/
           chmod 600 ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+          head -n 2 ~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
 
-          # Verificar tamaño para confirmar que la llave no esté vacía
-          ls -la ~/private_keys/
 
           # Subir a TestFlight usando xcrun altool oficial de Apple
           IPA_PATH=$(find ios/App/build/out -name "*.ipa" | head -n 1)
