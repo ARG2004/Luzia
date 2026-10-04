@@ -68,9 +68,12 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
 
-          # 5. Instalar provisioning profile
+          # 5. Instalar provisioning profile con su UUID oficial
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i $PP_PATH))
+          echo "Profile UUID detectado: $PROFILE_UUID"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$PROFILE_UUID.mobileprovision
 
       - name: Resolve Swift Package Dependencies
         run: |
@@ -86,10 +89,13 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath build/Luzia.xcarchive \
             CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="X423NH338U" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             CODE_SIGN_IDENTITY="Apple Distribution"
 
       - name: Create Export Options Plist
         run: |
+          mkdir -p ios/App/build
           cat <<EOF > ios/App/build/ExportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -97,15 +103,21 @@ jobs:
           <dict>
               <key>method</key>
               <string>app-store</string>
-              <key>destination</key>
-              <string>export</string>
+              <key>teamID</key>
+              <string>X423NH338U</string>
               <key>signingStyle</key>
               <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.luzia.accessibility</key>
+                  <string>$PROFILE_UUID</string>
+              </dict>
               <key>stripSwiftSymbols</key>
               <true/>
           </dict>
           </plist>
           EOF
+
 
       - name: Export IPA
         run: |
