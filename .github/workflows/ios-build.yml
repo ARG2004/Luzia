@@ -54,7 +54,8 @@ jobs:
 
           # Convertir p12 a formato compatible con macOS security keychain
           openssl pkcs12 -in $CERTIFICATE_PATH -nodes -passin pass:"$P12_PASSWORD" -out $RUNNER_TEMP/temp_cert.pem
-          openssl pkcs12 -export -in $RUNNER_TEMP/temp_cert.pem -out $RUNNER_TEMP/mac_compat.p12 -passout pass:"$P12_PASSWORD" -legacy
+          openssl pkcs12 -export -in $RUNNER_TEMP/temp_cert.pem -out $RUNNER_TEMP/mac_compat.p12 -passout pass:"$P12_PASSWORD"
+
 
           # 3. Crear keychain temporal
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
