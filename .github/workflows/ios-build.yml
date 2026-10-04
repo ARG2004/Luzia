@@ -8,7 +8,7 @@ on:
 jobs:
   build-and-upload:
     name: Build & Upload to TestFlight
-    runs-on: macos-14 # Apple Silicon runner
+    runs-on: macos-15
 
     steps:
       - name: Checkout repository
@@ -29,10 +29,13 @@ jobs:
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+      - name: Select Highest Xcode Version
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          echo "Seleccionando la versión de Xcode más reciente disponible: $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE"
+          xcodebuild -version
+
 
 
       - name: Install Apple Certificate and Provisioning Profile
