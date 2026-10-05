@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { X, Play, Square, Zap, AlertTriangle, FileText, Sparkles } from 'lucide-react'
+import { X, Play, Square, Zap, AlertTriangle, FileText, Sparkles, Tv } from 'lucide-react'
 import { HapticsService } from '../services/hapticsService'
+import { AudioFeedbackService } from '../services/audioFeedbackService'
 
 interface HorrorSimulatorModalProps {
   isOpen: boolean
@@ -142,7 +143,8 @@ export const HorrorSimulatorModal: React.FC<HorrorSimulatorModalProps> = ({
         </div>
 
         {/* Sección 2: Simulador de Señalética Nocturna */}
-        <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/30">
+        {/* Sección 2: Simulador de Señalética Nocturna */}
+        <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/30 mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold font-mono text-cyan-400 flex items-center gap-1.5 uppercase">
               <FileText className="w-4 h-4" />
@@ -217,6 +219,103 @@ export const HorrorSimulatorModal: React.FC<HorrorSimulatorModalProps> = ({
               </span>
               <span className="text-[11px] text-gray-400 block font-mono">
                 Servicios del festival
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Sección 3: MODO FAZBEAR RETRO 8-BITS (FNAF MINIGAMES) */}
+        <div className="p-4 rounded-2xl bg-zinc-950/90 border-2 border-amber-500/50 shadow-[0_0_25px_rgba(245,158,11,0.2)]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-black font-mono text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
+              <Tv className="w-4 h-4 text-amber-400 animate-pulse" />
+              3. MODO FAZBEAR SECURITY (FNAF 8-BIT)
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              MINIJUEGO RETRO
+            </span>
+          </div>
+
+          <p className="text-xs text-gray-300 mb-3 font-mono">
+            Simula las cámaras de seguridad y señalética de la pizzería con sonido de estática CRT y alerta sensorial háptica:
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                HapticsService.strobeWarning()
+                AudioFeedbackService.playCameraSwitchStatic()
+                onInjectSimulatedSign('CAM 1A - SHOW STAGE')
+                onClose()
+              }}
+              className="p-3 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/60 text-left transition-all group relative overflow-hidden"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-black font-mono text-amber-300 group-hover:underline">
+                  [CAM 1A - SHOW STAGE]
+                </span>
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              </div>
+              <span className="text-[11px] text-amber-200/80 block font-mono">
+                Freddy, Bonnie y Chica activos en tarima
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                HapticsService.strobeWarning()
+                AudioFeedbackService.playCameraSwitchStatic()
+                onInjectSimulatedSign('CAM 2B - WEST HALL')
+                onClose()
+              }}
+              className="p-3 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/60 text-left transition-all group"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-black font-mono text-purple-300 group-hover:underline">
+                  [CAM 2B - WEST HALL]
+                </span>
+                <span className="w-2 h-2 rounded-full bg-purple-400" />
+              </div>
+              <span className="text-[11px] text-purple-200/80 block font-mono">
+                Pasillo oscuro y suelo con cables
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                HapticsService.tap()
+                AudioFeedbackService.playCameraSwitchStatic()
+                onInjectSimulatedSign('PIRATE COVE - OUT OF ORDER')
+                onClose()
+              }}
+              className="p-3 rounded-xl bg-red-950/60 hover:bg-red-900/80 border border-red-500/60 text-left transition-all group"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-black font-mono text-red-300 block mb-0.5 group-hover:underline">
+                  [PIRATE COVE: FUERA DE SERVICIO]
+                </span>
+                <span className="text-[11px] text-red-200/80 block font-mono">
+                  Señalética de advertencia Foxy
+                </span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                HapticsService.signDetected()
+                AudioFeedbackService.playCameraSwitchStatic()
+                onInjectSimulatedSign('HAPPIEST DAY - SALIDA')
+                onClose()
+              }}
+              className="p-3 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/60 text-left transition-all group"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-black font-mono text-cyan-300 block mb-0.5 group-hover:underline">
+                  [HAPPIEST DAY - SALIDA DE SEGURIDAD]
+                </span>
+              </div>
+              <span className="text-[11px] text-cyan-200/80 block font-mono">
+                Evacuación con globos y celebración
               </span>
             </button>
           </div>

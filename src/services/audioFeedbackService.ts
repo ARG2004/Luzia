@@ -158,4 +158,43 @@ export class AudioFeedbackService {
       // Audio fallback
     }
   }
+
+  /**
+   * Sonido de cambio de cámara de seguridad / estática retro estilo FNAF
+   */
+  public static playCameraSwitchStatic(): void {
+    if (this.isMuted) return
+    const ctx = this.getContext()
+    if (!ctx) return
+
+    try {
+      const now = ctx.currentTime
+      const bufferSize = Math.floor(ctx.sampleRate * 0.12)
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+      const data = buffer.getChannelData(0)
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.7
+      }
+
+      const noise = ctx.createBufferSource()
+      noise.buffer = buffer
+
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'bandpass'
+      filter.frequency.setValueAtTime(1200, now)
+
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0.15, now)
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12)
+
+      noise.connect(filter)
+      filter.connect(gain)
+      gain.connect(ctx.destination)
+
+      noise.start(now)
+    } catch {
+      // Audio fallback
+    }
+  }
 }
+
