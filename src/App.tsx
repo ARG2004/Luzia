@@ -6,11 +6,13 @@ import {
   Sliders,
   AlertTriangle,
   Shield,
-  Layers,
   HeartPulse,
+  Gamepad2,
+  Video,
 } from 'lucide-react'
 import { HeaderTactical } from './components/HeaderTactical'
 import { MainCameraHUD } from './components/MainCameraHUD'
+import { FnafStageMinigame } from './components/FnafStageMinigame'
 import { StrobeRadarDisplay } from './components/StrobeRadarDisplay'
 import { ObstacleRadarDisplay } from './components/ObstacleRadarDisplay'
 import { OcrSignReaderDisplay } from './components/OcrSignReaderDisplay'
@@ -23,13 +25,12 @@ import { TtsService } from './services/ttsService'
 import { AudioFeedbackService } from './services/audioFeedbackService'
 import { HapticsService } from './services/hapticsService'
 
-
-
 type ActiveTab = 'HUD' | 'STROBE' | 'OCR' | 'DOCS'
 
 export const App: React.FC = () => {
   // Navigation & Tabs
   const [activeTab, setActiveTab] = useState<ActiveTab>('HUD')
+  const [use8BitMinigameView, setUse8BitMinigameView] = useState<boolean>(true)
 
   // Real-time sensory states
   const [fps, setFps] = useState<number>(60)
@@ -89,7 +90,6 @@ export const App: React.FC = () => {
     }
   }, [isPanicActive])
 
-
   // Toggle Mute
   const handleToggleMute = () => {
     const nextMuted = !isMuted
@@ -105,7 +105,7 @@ export const App: React.FC = () => {
     setIsPanicActive(prev => {
       const next = !prev
       if (next) {
-        TtsService.speak('¡Alerta de auxilio emitida! Personal de asistencia requerido.', true)
+        TtsService.speak('¡Alerta Fazbear de auxilio emitida! Personal de asistencia requerido.', true)
       } else {
         TtsService.stop()
       }
@@ -148,46 +148,22 @@ export const App: React.FC = () => {
       setIsHapticEnabled(true)
       setIsAudioEnabled(true)
       setIsTtsEnabled(true)
-      AudioFeedbackService.setMuted(false)
-      setIsMuted(false)
-      TtsService.speak('Perfil de baja visión activado. Bordes neón y sónar continuo.', true)
     } else if (profile === 'STROBE_CRITICAL') {
       setHighSensitivityStrobe(true)
       setIsHapticEnabled(true)
       setIsAudioEnabled(true)
-      TtsService.speak('Perfil fotosensible crítico activado. Alerta estroboscópica prioritaria.', true)
     } else if (profile === 'SILENT_HAPTIC') {
-      setIsHapticEnabled(true)
       setIsAudioEnabled(false)
       setIsTtsEnabled(false)
-      setIsMuted(true)
+      setIsHapticEnabled(true)
       AudioFeedbackService.setMuted(true)
+      setIsMuted(true)
     }
-    setIsSettingsOpen(false)
   }
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-[#f1f5f9] flex flex-col justify-between font-sans relative selection:bg-red-500 selection:text-white">
-      {/* Alerta de Pánico en Pantalla Completa si está activado */}
-      {isPanicActive && (
-        <div className="fixed inset-0 z-50 bg-red-600/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center select-none animate-pulse">
-          <AlertTriangle className="w-24 h-24 text-white mb-4 animate-bounce" />
-          <h2 className="text-4xl font-black font-heading tracking-widest text-white mb-2">
-            BALIZA DE AUXILIO SOS ACTIVA
-          </h2>
-          <p className="text-xl font-mono text-red-100 max-w-md mb-8">
-            Emisión de sirena de emergencia y vibración táctil para el staff del evento.
-          </p>
-          <button
-            onClick={handleTogglePanic}
-            className="px-8 py-4 rounded-2xl bg-white text-red-600 font-heading font-black text-xl shadow-[0_0_40px_rgba(255,255,255,0.8)] active:scale-95 transition-all"
-          >
-            DESACTIVAR AUXILIO
-          </button>
-        </div>
-      )}
-
-      {/* Header Táctico */}
+    <div className="min-h-screen bg-[#090814] text-[#e2e8f0] flex flex-col font-crt relative selection:bg-purple-900 selection:text-white">
+      {/* Top Header Tactical Fazbear */}
       <HeaderTactical
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
@@ -200,41 +176,110 @@ export const App: React.FC = () => {
         onOpenSimulator={() => setIsSimulatorOpen(true)}
       />
 
+      {/* Selector Rápido de Modo de Visor */}
+      <div className="w-full max-w-5xl mx-auto px-3 sm:px-5 pt-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="font-pixel text-[9px] text-[#00ff66] tracking-wider flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#00ff66] animate-ping" />
+            VIGILANCIA EN DIRECTO
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              AudioFeedbackService.playCameraSwitchStatic()
+              HapticsService.tap()
+              setUse8BitMinigameView(true)
+            }}
+            className={`px-3 py-1 font-pixel text-[8px] sm:text-[9px] rounded-lg border transition-all flex items-center gap-1.5 ${
+              use8BitMinigameView
+                ? 'bg-purple-600/30 text-purple-200 border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.5)]'
+                : 'bg-black/60 text-gray-400 border-gray-700 hover:text-white'
+            }`}
+          >
+            <Gamepad2 className="w-3.5 h-3.5" />
+            <span>MODO 8-BIT FNAF</span>
+          </button>
+
+          <button
+            onClick={() => {
+              AudioFeedbackService.playCameraSwitchStatic()
+              HapticsService.tap()
+              setUse8BitMinigameView(false)
+            }}
+            className={`px-3 py-1 font-pixel text-[8px] sm:text-[9px] rounded-lg border transition-all flex items-center gap-1.5 ${
+              !use8BitMinigameView
+                ? 'bg-cyan-600/30 text-cyan-200 border-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.5)]'
+                : 'bg-black/60 text-gray-400 border-gray-700 hover:text-white'
+            }`}
+          >
+            <Video className="w-3.5 h-3.5" />
+            <span>CÁMARA REAL</span>
+          </button>
+        </div>
+      </div>
+
       {/* Contenido Principal */}
       <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-4">
-        {/* Banner de Estado de Peligro Global si hay destello o cable inmediato */}
+        {/* Banner de Estado de Peligro Global si hay destello */}
         {strobeStatus.isDangerous && (
-          <div className="w-full bg-red-600 text-white p-3 rounded-2xl flex items-center justify-between shadow-[0_0_30px_rgba(255,30,66,0.6)] animate-pulse-danger">
+          <div className="w-full bg-red-600 text-white p-3 rounded-xl border-4 border-red-400 flex items-center justify-between shadow-[0_0_35px_rgba(255,30,66,0.9)] animate-pulse">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-black/30">
+              <div className="p-2 rounded bg-black/40">
                 <HeartPulse className="w-6 h-6 text-white animate-spin" />
               </div>
               <div>
-                <div className="font-heading font-black text-sm uppercase tracking-wider">
-                  ¡ADVERTENCIA FOTOSENSIBLE DETECTADA ({strobeStatus.frequencyHz} Hz)!
+                <div className="font-pixel text-[10px] sm:text-xs uppercase tracking-wider">
+                  ¡ADVERTENCIA FOTOSENSIBLE DETECTADA ({strobeStatus.frequencyHz} HZ)!
                 </div>
-                <div className="text-xs font-mono text-red-100">
+                <div className="text-sm font-crt text-red-100">
                   Desvíe la mirada del frente. Vibración háptica de alerta en curso.
                 </div>
               </div>
             </div>
-            <span className="font-mono text-xs px-3 py-1 bg-black/50 rounded-lg uppercase">
-              3 - 30 Hz
+            <span className="font-pixel text-[9px] px-2.5 py-1 bg-black/60 rounded border border-red-300">
+              3 - 30 HZ
             </span>
           </div>
         )}
 
-        {/* Visor de Cámara HUD (Siempre presente y procesando en vivo) */}
-        <section className="relative">
-          <MainCameraHUD
-            filterMode={filterMode}
-            onStrobeUpdate={setStrobeStatus}
-            onObstacleUpdate={setObstacleAnalysis}
-            onFpsUpdate={setFps}
-            externalSignToProcess={simulatedSignText}
-            onSignProcessed={res => setLastOcrResult(res)}
-            registerOcrTrigger={handleRegisterOcrTrigger}
-          />
+        {/* Visor Principal: Minijuego 8-Bit (por defecto) o Cámara Real */}
+        <section className="relative w-full">
+          {use8BitMinigameView ? (
+            <FnafStageMinigame
+              isStrobeAlert={strobeStatus.isDangerous}
+              hasObstacleAlert={obstacleAnalysis.hasHazard}
+              strobeHz={strobeStatus.frequencyHz}
+              onTriggerSimulatedSign={handleInjectSimulatedSign}
+              onToggleRealCamera={() => setUse8BitMinigameView(false)}
+              isRealCameraActive={false}
+            />
+          ) : (
+            <div className="fnaf-crt-box rounded-2xl overflow-hidden border-4 border-[#3c3468]">
+              <div className="bg-[#090814] px-4 py-2 border-b-2 border-[#3c3468] flex items-center justify-between text-xs text-green-400 font-pixel">
+                <span className="flex items-center gap-1.5 text-[9px]">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
+                  CÁMARA TRASERA EN VIVO (WEBCAM)
+                </span>
+                <button
+                  onClick={() => setUse8BitMinigameView(true)}
+                  className="px-2 py-0.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-500 rounded text-purple-200 text-[8px]"
+                >
+                  VOLVER A 8-BIT
+                </button>
+              </div>
+              <MainCameraHUD
+                filterMode={filterMode}
+                onStrobeUpdate={setStrobeStatus}
+                onObstacleUpdate={setObstacleAnalysis}
+                onFpsUpdate={setFps}
+                externalSignToProcess={simulatedSignText}
+                onSignProcessed={res => setLastOcrResult(res)}
+                registerOcrTrigger={handleRegisterOcrTrigger}
+              />
+            </div>
+          )}
         </section>
 
         {/* Vistas según Pestaña Activa */}
@@ -252,29 +297,29 @@ export const App: React.FC = () => {
         {activeTab === 'STROBE' && (
           <div className="space-y-4">
             <StrobeRadarDisplay strobeStatus={strobeStatus} />
-            <div className="glass-panel rounded-2xl p-5 border border-white/10">
-              <h3 className="text-sm font-extrabold font-mono text-cyan-400 uppercase mb-2 flex items-center gap-2">
+            <div className="fnaf-crt-box rounded-2xl p-5 border-4 border-[#3c3468]">
+              <h3 className="text-sm sm:text-base font-pixel text-[#00ff66] uppercase mb-2 flex items-center gap-2">
                 <Activity className="w-4 h-4" />
-                Fundamento Médico de Fotosensibilidad
+                FUNDAMENTO MÉDICO: FOTOSENSIBILIDAD
               </h3>
-              <p className="text-xs text-gray-300 leading-relaxed mb-3">
+              <p className="text-base text-gray-200 leading-relaxed mb-3 font-crt">
                 Las luces estroboscópicas con frecuencias comprendidas entre <b>3 Hz y 30 Hz</b>{' '}
                 (con pico de riesgo entre 12 Hz y 18 Hz) pueden inducir crisis convulsivas en personas con
                 epilepsia fotosensible, además de provocar desorientación espacial severa y mareo en
                 visitantes con baja visión.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
-                <div className="p-3 rounded-xl bg-black/40 border border-emerald-500/30">
-                  <span className="text-emerald-400 font-bold block mb-1">0 a 2.9 Hz</span>
-                  <span className="text-gray-400 text-[11px]">Parpadeo lento no convulsivo</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm font-crt">
+                <div className="p-3 rounded-lg bg-black/60 border-2 border-emerald-500/40">
+                  <span className="text-emerald-400 font-pixel text-[9px] block mb-1">0 A 2.9 HZ</span>
+                  <span className="text-gray-300">Parpadeo lento no convulsivo</span>
                 </div>
-                <div className="p-3 rounded-xl bg-black/40 border border-red-500/40">
-                  <span className="text-red-400 font-bold block mb-1">3.0 a 30 Hz</span>
-                  <span className="text-gray-400 text-[11px]">Zona de alto riesgo neurológico</span>
+                <div className="p-3 rounded-lg bg-black/60 border-2 border-red-500/60">
+                  <span className="text-red-400 font-pixel text-[9px] block mb-1">3.0 A 30 HZ</span>
+                  <span className="text-gray-300">Zona de alto riesgo neurológico</span>
                 </div>
-                <div className="p-3 rounded-xl bg-black/40 border border-amber-500/30">
-                  <span className="text-amber-400 font-bold block mb-1">&gt; 30 Hz</span>
-                  <span className="text-gray-400 text-[11px]">Fusión visual continua</span>
+                <div className="p-3 rounded-lg bg-black/60 border-2 border-amber-500/40">
+                  <span className="text-amber-400 font-pixel text-[9px] block mb-1">&gt; 30 HZ</span>
+                  <span className="text-gray-300">Fusión visual continua</span>
                 </div>
               </div>
             </div>
@@ -292,38 +337,38 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'DOCS' && (
-          <div className="glass-panel rounded-3xl p-6 border border-white/10 space-y-6">
-            <div className="flex items-center gap-3 pb-4 border-b border-white/10">
-              <div className="p-3 rounded-2xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-300">
+          <div className="fnaf-crt-box rounded-2xl p-5 sm:p-6 border-4 border-[#3c3468] space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b-2 border-[#3c3468]">
+              <div className="p-3 rounded-xl bg-purple-950/80 border-2 border-purple-500/60 text-purple-300">
                 <FileCheck className="w-8 h-8" />
               </div>
               <div>
-                <h2 className="text-xl font-black font-heading text-white">
-                  Luzía: Asistente Sensorial de Movilidad y Accesibilidad
+                <h2 className="text-sm sm:text-base font-pixel text-white">
+                  FAZBEAR ENTERTAINMENT // PROTOCOLO LUZÍA
                 </h2>
-                <p className="text-xs font-mono text-cyan-400">
-                  Resumen Ejecutivo y Especificaciones Técnicas del Proyecto (14 Días)
+                <p className="text-sm text-green-400 font-crt">
+                  Manual de Seguridad Sensorial y Especificaciones Técnicas (14 Días)
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2">
-                <h3 className="font-bold font-mono text-amber-300 uppercase flex items-center gap-1.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-crt">
+              <div className="p-4 rounded-xl bg-black/60 border-2 border-[#3c3468] space-y-2">
+                <h3 className="font-pixel text-[9px] text-amber-300 uppercase flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4" /> 1. La Necesidad en Eventos de Terror
                 </h3>
-                <p className="text-gray-300 leading-relaxed">
+                <p className="text-gray-200 leading-relaxed">
                   En festivales y casas del terror, la iluminación tenue, los efectos estroboscópicos
                   y el cableado expuesto a nivel de suelo generan un entorno de alto riesgo y
                   desorientación para personas con baja visión, ceguera parcial o fotosensibilidad.
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2">
-                <h3 className="font-bold font-mono text-emerald-300 uppercase flex items-center gap-1.5">
+              <div className="p-4 rounded-xl bg-black/60 border-2 border-[#3c3468] space-y-2">
+                <h3 className="font-pixel text-[9px] text-emerald-300 uppercase flex items-center gap-1.5">
                   <Shield className="w-4 h-4" /> 2. Los 3 Pilares Resueltos
                 </h3>
-                <ul className="text-gray-300 space-y-1.5 list-disc pl-4">
+                <ul className="text-gray-200 space-y-1.5 list-disc pl-4">
                   <li><b>Detector Háptico de Estrobos:</b> Análisis de frecuencia (3 - 30 Hz).</li>
                   <li><b>Scanner de Suelo:</b> Filtros de bordes y pulsos sónar proporcionales a la proximidad.</li>
                   <li><b>OCR + TTS Local:</b> Lectura instantánea por voz de letreros en penumbra sin internet.</li>
@@ -331,21 +376,21 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Comparativa de Mercado */}
+            {/* Comparativa de Mercado Fazbear vs Convencional */}
             <div>
-              <h3 className="text-xs font-bold font-mono text-gray-400 uppercase mb-3">
+              <h3 className="font-pixel text-[9px] text-gray-300 uppercase mb-3">
                 COMPARATIVA CON SOLUCIONES ACTUALES DE MERCADO
               </h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs font-mono border-collapse">
+                <table className="w-full text-left text-sm font-crt border-collapse">
                   <thead>
-                    <tr className="border-b border-white/10 text-gray-400">
-                      <th className="py-2 px-3">Solución Tradicional</th>
-                      <th className="py-2 px-3">Limitación Principal en Eventos Nocturnos</th>
-                      <th className="py-2 px-3 text-cyan-400">Ventaja Clave de Luzía</th>
+                    <tr className="border-b-2 border-[#3c3468] text-gray-400">
+                      <th className="py-2 px-3 font-pixel text-[8px]">Solución Tradicional</th>
+                      <th className="py-2 px-3 font-pixel text-[8px]">Limitación en Eventos Nocturnos</th>
+                      <th className="py-2 px-3 font-pixel text-[8px] text-green-400">Ventaja Clave Luzía</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5 text-gray-300">
+                  <tbody className="divide-y divide-[#2a2448] text-gray-200">
                     <tr>
                       <td className="py-2.5 px-3 font-bold text-white">Bastón blanco</td>
                       <td className="py-2.5 px-3">Solo contacto a nivel de suelo, no advierte destellos.</td>
@@ -372,44 +417,43 @@ export const App: React.FC = () => {
             </div>
 
             {/* Enlace y Estado de Política de Privacidad para Stores */}
-            <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="p-4 rounded-xl bg-purple-950/40 border-2 border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
-                <span className="text-xs font-mono font-bold text-cyan-300 block mb-0.5">
+                <span className="font-pixel text-[9px] text-purple-300 block mb-0.5">
                   POLÍTICA DE PRIVACIDAD & SEGURIDAD DE DATOS (ON-DEVICE)
                 </span>
-                <span className="text-[11px] text-gray-400 block font-mono">
-                  Cumplimiento con App Store Review Guidelines & Google Play Data Safety
+                <span className="text-xs text-gray-400 block font-crt">
+                  Cumplimiento verificado con Google Play Data Safety & App Store Review Guidelines
                 </span>
               </div>
               <a
                 href="/privacy.html"
                 target="_blank"
                 rel="noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400 text-cyan-200 text-xs font-mono font-bold transition-all shrink-0"
+                className="px-3 py-1.5 rounded bg-purple-500/30 hover:bg-purple-500/50 border border-purple-400 text-purple-200 font-pixel text-[8px] transition-all shrink-0"
               >
                 VER POLÍTICA PÚBLICA ↗
               </a>
             </div>
           </div>
         )}
-
       </main>
 
-      {/* Barra de Navegación Inferior Móvil Accesible */}
-      <nav className="w-full bg-[#07090e]/95 backdrop-blur-md border-t border-white/10 px-4 py-2 flex items-center justify-around z-30 select-none">
+      {/* Barra de Navegación Inferior Móvil Fazbear */}
+      <nav className="w-full bg-[#080712]/95 backdrop-blur-md border-t-4 border-[#3c3468] px-2 sm:px-4 py-2 flex items-center justify-around z-30 select-none font-pixel">
         <button
           onClick={() => {
             HapticsService.tap()
             setActiveTab('HUD')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
             activeTab === 'HUD'
               ? 'text-cyan-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
         >
-          <Layers className="w-5 h-5" />
-          <span className="text-[10px] font-mono">VISOR HUD</span>
+          <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-[7px] sm:text-[8px]">ESCENARIO</span>
         </button>
 
         <button
@@ -417,14 +461,14 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setActiveTab('STROBE')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
             activeTab === 'STROBE'
               ? 'text-red-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
         >
-          <Activity className="w-5 h-5" />
-          <span className="text-[10px] font-mono">ESTROBOS</span>
+          <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-[7px] sm:text-[8px]">ESTROBOS</span>
         </button>
 
         <button
@@ -432,14 +476,14 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setActiveTab('OCR')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
             activeTab === 'OCR'
               ? 'text-amber-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
         >
-          <ScanText className="w-5 h-5" />
-          <span className="text-[10px] font-mono">SEÑALÉTICA</span>
+          <ScanText className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-[7px] sm:text-[8px]">SEÑALES</span>
         </button>
 
         <button
@@ -447,14 +491,14 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setActiveTab('DOCS')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
             activeTab === 'DOCS'
               ? 'text-emerald-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
         >
-          <FileCheck className="w-5 h-5" />
-          <span className="text-[10px] font-mono">PROYECTO</span>
+          <FileCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-[7px] sm:text-[8px]">MANUAL</span>
         </button>
 
         <button
@@ -462,10 +506,10 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setIsSettingsOpen(true)
           }}
-          className="flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl text-gray-400 hover:text-white transition-all"
+          className="flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg text-gray-400 hover:text-white transition-all"
         >
-          <Sliders className="w-5 h-5" />
-          <span className="text-[10px] font-mono">AJUSTES</span>
+          <Sliders className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-[7px] sm:text-[8px]">AJUSTES</span>
         </button>
       </nav>
 

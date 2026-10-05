@@ -9,26 +9,63 @@
     --color-neon-amber: #ffaa00;
     --color-neon-toxic: #00ff66;
     --color-neon-cyan: #00f0ff;
-    --font-heading: 'Syne', sans-serif;
-    --font-body: 'Outfit', sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+    --font-heading: 'Press Start 2P', cursive, sans-serif;
+    --font-body: 'VT323', monospace, sans-serif;
+    --font-mono: 'VT323', monospace;
+    --font-pixel: 'Press Start 2P', cursive;
   }
 
   body {
-    font-family: var(--font-body);
-    background-color: var(--color-bg-dark);
-    color: #f1f5f9;
+    font-family: 'VT323', monospace;
+    background-color: #0b0914;
+    color: #e2e8f0;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
 
   h1, h2, h3, .font-heading {
-    font-family: var(--font-heading);
+    font-family: 'Press Start 2P', cursive;
   }
 
-  .font-mono {
-    font-family: var(--font-mono);
+  .font-pixel {
+    font-family: 'Press Start 2P', cursive;
   }
+
+  .font-crt {
+    font-family: 'VT323', monospace;
+  }
+}
+
+/* FNAF 8-Bit Checkered Floor (Image 3 authentic style) */
+.fnaf-checkered-floor {
+  background-color: #1a1a24;
+  background-image: 
+    linear-gradient(45deg, #0d0d14 25%, transparent 25%), 
+    linear-gradient(-45deg, #0d0d14 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #0d0d14 75%), 
+    linear-gradient(-45deg, transparent 75%, #0d0d14 75%);
+  background-size: 48px 48px;
+  background-position: 0 0, 0 24px, 24px -24px, -24px 0px;
+}
+
+/* FNAF CRT Terminal Screen */
+.fnaf-crt-box {
+  background: #090814;
+  border: 4px solid #373168;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.95), inset 0 0 35px rgba(0, 0, 0, 0.85);
+  position: relative;
+}
+
+.fnaf-crt-box::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%);
+  background-size: 100% 4px;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0.8;
 }
 
 /* Horror / HUD Animations */

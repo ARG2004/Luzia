@@ -99,6 +99,19 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     }
   }, [externalSignToProcess, onSignProcessed])
 
+  // Refs para evitar re-suscripciones y bucles de re-render en loop de 60fps
+  const onStrobeUpdateRef = useRef(onStrobeUpdate)
+  const onObstacleUpdateRef = useRef(onObstacleUpdate)
+  const onFpsUpdateRef = useRef(onFpsUpdate)
+  onStrobeUpdateRef.current = onStrobeUpdate
+  onObstacleUpdateRef.current = onObstacleUpdate
+  onFpsUpdateRef.current = onFpsUpdate
+
+  const lastStrobeUpdateTimeRef = useRef<number>(0)
+  const lastObstacleUpdateTimeRef = useRef<number>(0)
+  const lastStrobeDangerStateRef = useRef<boolean>(false)
+  const lastHazardStateRef = useRef<boolean>(false)
+
   // Método de escaneo OCR expuesto
   const triggerOcrScan = useCallback(async (): Promise<OcrResult | null> => {
     const canvas = displayCanvasRef.current || sourceCanvasRef.current
@@ -122,7 +135,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
 
       if (now - lastFpsTime >= 1000) {
         const currentFps = Math.round((frameCount * 1000) / (now - lastFpsTime))
-        onFpsUpdate(currentFps)
+        onFpsUpdateRef.current(currentFps)
         frameCount = 0
         lastFpsTime = now
       }
@@ -195,7 +208,14 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
 
           // 1. Análisis de Fotosensibilidad Estroboscópica
           const strobeStatus = StrobeDetector.analyzeFrame(sCtx, w, h, now)
-          onStrobeUpdate(strobeStatus)
+          if (
+            strobeStatus.isDangerous !== lastStrobeDangerStateRef.current ||
+            now - lastStrobeUpdateTimeRef.current >= 120
+          ) {
+            onStrobeUpdateRef.current(strobeStatus)
+            lastStrobeDangerStateRef.current = strobeStatus.isDangerous
+            lastStrobeUpdateTimeRef.current = now
+          }
 
           if (strobeStatus.isDangerous) {
             // Feedback háptico y sonoro
@@ -208,7 +228,14 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
 
           // 2. Procesamiento de Bordes de Alto Contraste y Escáner de Suelo
           const obstacleAnalysis = ObstacleScanner.processFrame(sCtx, dCtx, w, h, filterMode, 34)
-          onObstacleUpdate(obstacleAnalysis)
+          if (
+            obstacleAnalysis.hasHazard !== lastHazardStateRef.current ||
+            now - lastObstacleUpdateTimeRef.current >= 120
+          ) {
+            onObstacleUpdateRef.current(obstacleAnalysis)
+            lastHazardStateRef.current = obstacleAnalysis.hasHazard
+            lastObstacleUpdateTimeRef.current = now
+          }
 
           if (obstacleAnalysis.hasHazard && !strobeStatus.isDangerous) {
             // Pulso háptico y beep de proximidad proporcional a la distancia
@@ -226,7 +253,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId)
     }
-  }, [filterMode, isUsingSimulatedFeed, onFpsUpdate, onObstacleUpdate, onStrobeUpdate])
+  }, [filterMode, isUsingSimulatedFeed])
 
   return (
     <div className="relative w-full aspect-[4/3] sm:aspect-video max-h-[58vh] bg-black rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.8)] select-none">
