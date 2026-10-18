@@ -1,14 +1,13 @@
 name: Build & Deploy iOS to TestFlight (macOS Cloud)
 
 on:
-  push:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build-and-upload:
     name: Build & Upload to TestFlight
     runs-on: macos-15
+    environment: production
 
     steps:
       - name: Checkout repository

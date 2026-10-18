@@ -1,101 +1,158 @@
-# 👁️ Luzía: Asistente Sensorial de Movilidad y Accesibilidad
-### ⚡ Especializado para Eventos Nocturnos, Festivales y Casas del Terror
+# 👁️ Luzía — Asistente Sensorial de Movilidad y Accesibilidad
+### ⚡ Proyecto de Ciencias e Innovación Tecnológica (Electriciencia)
+> **Asistente sensorial multimodal para personas con baja visión, ceguera nocturna y fotosensibilidad severa en entornos de penumbra y eventos nocturnos.**
 
-> **MVP Acelerado (14 Días) — Web App (PWA) + App Móvil Híbrida (Capacitor Android & iOS)**  
-> Desarrollado para personas con **baja visión, ceguera parcial o fotosensibilidad severa** en entornos de penumbra, cableado expuesto en el suelo y luces parpadeantes.
-
----
-
-## 📸 Resumen de Capacidades Técnicas (Los 3 Pilares del Proyecto)
-
-### 1. ⚡ Detector Háptico de Luces Estroboscópicas (Fotosensibilidad)
-- **Procesamiento de luminancia:** Muestreo en tiempo real a 60 FPS de la luminancia media $Y = 0.299R + 0.587G + 0.114B$.
-- **Rango de frecuencia clínica:** Detección precisa de parpadeos entre **3 Hz y 30 Hz** (con zona crítica neurológica de 12 Hz a 18 Hz).
-- **Feedback sensorial inmediato:** Alerta visual neón carmesí, patrón háptico severo (`Haptics.notification` + `navigator.vibrate`) y tono oscilante de advertencia para que el usuario desvíe la mirada con antelación.
-
-### 2. 👣 Scanner de Obstáculos por Alto Contraste (Cables y Desniveles en Suelo)
-- **Filtro de bordes Sobel:** Algoritmo de convolución optimizado en Canvas enfocado en el tercio inferior del campo visual (suelo).
-- **Modos visuales accesibles:**
-  - **Bordes Neón:** Cables y escalones resaltados en verde fosforescente y rojo carmesí sobre fondo negro azabache (WCAG AAA).
-  - **Visión Nocturna:** Aumento gamma de penumbra con realce de bordes.
-  - **Alto Contraste Monocromático:** Máxima legibilidad en blanco y negro puro.
-- **Pulsos hápticos y sónar acústico:** A menor distancia del cable o desnivel, mayor frecuencia y cadencia de pulsos mecánicos y sonoros (efecto sónar / sensor de reversa).
-
-### 3. 🔍 Lector de Señalética Nocturna (OCR + TTS Local On-Device)
-- **Motor On-Device:** Reconocimiento óptico de caracteres local con Tesseract.js (sin necesidad de conexión a internet ni servidores externos).
-- **Binarización adaptativa:** Pre-procesamiento de alto contraste para letreros reflectantes o débilmente iluminados en la oscuridad.
-- **Voz sintética asistiva (TTS):** Síntesis de voz instantánea en español orientada a emergencias (`"Salida de emergencia localizada al frente"`, `"Ruta de evacuación"`, `"Peligro: Alto voltaje"`).
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Capacitor](https://img.shields.io/badge/Capacitor-8-119EFF?logo=capacitor&logoColor=white)](https://capacitorjs.com/)
+[![Platforms](https://img.shields.io/badge/Platforms-Android%20%7C%20iOS%20%7C%20Web%20(PWA)-brightgreen)]()
 
 ---
 
-## 🎮 Simulador de Terror Integrado (Para Evaluadores y Pitch)
-Luzía cuenta con un **botón "TEST DE TERROR"** en el header para validar todas las funciones sensoriales directamente desde la PC o celular sin necesidad de estar dentro de una casa del terror física:
-- **Estroboscopio Virtual:** Generador de destellos a 6 Hz, 12 Hz, 18 Hz y 24 Hz para validar la alarma y vibración.
-- **Inyector de Señalética de Evacuación:** Permite probar el reconocimiento y la voz en español al instante.
-- **Modo Suelo con Cables:** Patrón oscuro interactivo con cables y escalones para probar el filtro de bordes Sobel.
+## 🔬 Justificación Científica y Propósito del Proyecto
+
+En atracciones nocturnas, conciertos, eventos culturales y casas del terror, confluyen tres factores de riesgo crítico para la salud y la accesibilidad:
+1. **Riesgo de Convulsiones Fotosensibles:** Luces estroboscópicas parpadeando en frecuencias críticas (3 Hz a 30 Hz) que pueden detonar crisis de epilepsia fotosensible o cefaleas severas (Directrices médicas de la OMS y W3C WCAG 2.2).
+2. **Desorientación y Caídas en Penumbra:** Cableado expuesto, desniveles y escalones en el suelo con iluminación nula o deficiente.
+3. **Inaccesibilidad de Letreros de Evacuación:** Salidas de emergencia y rutas de evacuación no legibles en la oscuridad para personas con discapacidad visual.
+
+**Luzía** resuelve estos tres problemas en tiempo real mediante **Edge Computing** (visión por computadora procesada 100% en el procesador local del dispositivo, sin internet ni servidores externos).
 
 ---
 
-## 🚀 Cómo Ejecutar y Probar el Proyecto
+## 📸 Los 3 Pilares Técnicos de Luzía
 
-### 1. Ejecutar como Web App / PWA
-```bash
-# Instalar dependencias (si no se han instalado)
-npm install
-
-# Iniciar servidor de desarrollo local
-npm run dev
-
-# Abrir en tu navegador:
-# http://localhost:5173
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      L U Z Í A   (H U D)                        │
+├───────────────────┬─────────────────────────┬───────────────────┤
+│ 1. ESTROBOS       │ 2. OBSTÁCULOS           │ 3. SEÑALÉTICA OCR │
+│ • Frecuencia (Hz) │ • Convolución Sobel     │ • Tesseract Local │
+│ • Alerta 3-30 Hz  │ • Radar Neón Suelo      │ • Síntesis TTS    │
+│ • Tono + Háptico  │ • Sónar por Proximidad  │ • Voz de Auxilio  │
+└───────────────────┴─────────────────────────┴───────────────────┘
 ```
 
-### 2. Compilar y Ejecutar en Android (Local en Windows)
-```bash
-# 1. Compilar los assets web
-npm run build
+### 1. ⚡ Detector Estroboscópico de Fotosensibilidad
+* **Algoritmo de Luminancia:** Muestreo a 60 FPS con la fórmula $Y = 0.299R + 0.587G + 0.114B$.
+* **Rango Clínico:** Detección de frecuencias de 3 Hz a 30 Hz con zona neurológica crítica entre 12 Hz y 18 Hz.
+* **Respuesta Inmediata:** Alerta visual carmesí, vibración mecánica háptica severa y tono oscilante para que el usuario aparte la vista antes de una crisis.
 
-# 2. Sincronizar el proyecto nativo
+### 2. 👣 Escáner de Obstáculos por Alto Contraste
+* **Kernel de Convolución Sobel:** Análisis espacial enfocado en el tercio inferior del campo visual (suelo).
+* **Modos de Filtro Visual:**
+  * **Bordes Neón:** Resalta cables y escalones en verde fosforescente y rojo sobre fondo negro azabache (WCAG AAA).
+  * **Visión Nocturna:** Realce de gamma para baja iluminación.
+  * **Monocromático Puro:** Máximo contraste binario para debilidad visual.
+* **Sónar Acústico y Háptico:** A menor distancia del obstáculo, mayor cadencia de pulsos sonoros y vibratorios (efecto sensor de reversa).
+
+### 3. 🔍 Lector de Señalética Nocturna (OCR + Voz Asistiva)
+* **On-Device OCR:** Reconocimiento de texto local sin conexión a internet mediante Tesseract.js.
+* **Binarización Adaptativa:** Mejora de contraste de letreros reflectantes en penumbra.
+* **Síntesis de Voz Asistiva:** Locución automática en español para rutas de escape (`"Salida de emergencia localizada al frente"`, `"Ruta de evacuación"`, `"Peligro"`).
+
+---
+
+## 🎮 Simulador de Terror Integrado (Demostrador para Evaluación)
+
+Para validar la tecnología en condiciones controladas de laboratorio o frente al jurado en la feria de ciencias:
+* **Entorno de Prueba FNAF (8-Bit Security Stage):** Escenario temático retro con animatrónicos en el que se recrean los tres peligros sensoriales.
+* **Inyector de Estroboscopio:** Genera destellos a 6 Hz, 12 Hz, 18 Hz y 24 Hz para validar la alarma y la vibración en vivo.
+* **Generador de Obstáculos de Suelo:** Prueba el filtro Sobel y el sónar sin tener que apagar las luces del auditorio.
+* **Inyector de Señalética:** Permite evaluar el OCR y la voz asistiva al instante con un solo toque.
+
+---
+
+## 💻 Guía Rápida para Colaboradores (Programación Local)
+
+### 📋 Requisitos Previos
+* **Node.js** v20 o superior
+* **npm** v10 o superior
+* *(Opcional)* **Android Studio** si deseas probar en emulador o dispositivo Android por USB.
+
+### 1. Clonar e Instalar
+```bash
+git clone https://github.com/tu-usuario/Electriciencia.git
+cd Electriciencia
+npm install
+```
+
+### 2. Ejecutar en Modo Desarrollo (Navegador)
+```bash
+npm run dev
+```
+Abre en tu navegador: [http://localhost:5173](http://localhost:5173)
+
+### 3. Compilar Proyecto
+```bash
+npm run build
+```
+
+### 4. Probar en Android (Local)
+No requieres llaves de producción para programar. Android compilará automáticamente en modo `debug`:
+```bash
+# Sincronizar archivos web con Android
 npx cap sync android
 
-# 3. Abrir en Android Studio
+# Abrir en Android Studio
 npx cap open android
 ```
-*Desde Android Studio podrás conectar tu teléfono por USB o emulador y presionar **Run**.*
 
 ---
 
-## 🍏 ¿Cómo Compilar para iOS Sin Tener Mac? (GitHub Actions Workflow)
+## 🔐 Arquitectura de Seguridad y Distribución
 
-Como no cuentas con una Mac física, se ha configurado un **pipeline automatizado de CI/CD** con **GitHub Actions** utilizando el runner oficial `macos-14` (Apple Silicon de Apple en la nube de GitHub).
+Para proteger las credenciales oficiales de publicación en tiendas, el repositorio cuenta con un modelo de seguridad estricto:
 
-### Archivos de Workflow incluidos:
-- [`.github/workflows/ios-build.yml`](.github/workflows/ios-build.yml): Compila el proyecto Xcode y exporta el archivo `Luzia-Release.ipa` listo para descargar o subir a TestFlight.
-- [`.github/workflows/android-build.yml`](.github/workflows/android-build.yml): Compila el APK de Release y el AAB (Android App Bundle) para Google Play Console.
-- [`.github/workflows/web-deploy.yml`](.github/workflows/web-deploy.yml): Despliega la Web App automáticamente a GitHub Pages.
+| Componente | Nivel de Acceso | Ubicación |
+| :--- | :--- | :--- |
+| **Código Fuente** | Abierto a colaboradores | Todo el repositorio |
+| **Android Debug** | Libre (sin credenciales) | Generado automáticamente por Gradle |
+| **Android Release Keystore** | **Privado (Solo Dueño)** | `.gitignore` / `keystore.properties` local |
+| **Apple Certificates & P12** | **Privado (Solo Dueño)** | GitHub Actions Secrets cifrados |
+| **Workflows de Publicación** | **Manual (Solo Dueño)** | `.github/workflows/` (`workflow_dispatch`) |
 
-### Pasos para generar tu IPA de iOS en GitHub:
-1. Sube este proyecto a tu repositorio de GitHub:
-   ```bash
-   git add .
-   git commit -m "Luzia App: Asistente sensorial de terror y accesibilidad"
-   git push origin main
-   ```
-2. Ve a la pestaña **Actions** en tu repositorio de GitHub.
-3. Selecciona el workflow **"Build iOS App (Cloud macOS Runner)"**.
-4. Haz clic en **Run workflow**.
-5. GitHub levantará una máquina Mac en la nube, resolverá los paquetes, compilará la app y generará un artefacto descargable llamado `Luzia-iOS-IPA`.
+*Los colaboradores pueden clonar, programar, modificar la interfaz y compilar localmente sin acceso a las credenciales oficiales de la App Store o Google Play.*
 
 ---
 
-## 🛠️ Stack Tecnológico
-- **Frontend Core:** React 19 + TypeScript + Vite 8
-- **Estilos:** Tailwind CSS v4 + Glassmorphism Cyber-Gothic de Alto Contraste
-- **Procesamiento de Imagen:** HTML5 Canvas Offscreen 60 FPS + Kernel Sobel Convolucional
-- **Accesibilidad & Sensores:**
-  - `@capacitor/core` & `@capacitor/haptics` + `navigator.vibrate` (Háptica multiplataforma)
-  - Web Audio API (Sónar acústico y osciladores polifónicos sin dependencias)
-  - Web Speech Synthesis API (TTS local en español)
-  - Tesseract.js (On-Device OCR)
-- **Empaquetado Nativo:** Capacitor 8 (Android & iOS)
-- **CI/CD Cloud:** GitHub Actions (macOS-14 + Ubuntu runners)
+## 📂 Estructura del Proyecto
+
+```text
+Electriciencia/
+├── android/                 # Proyecto nativo Android (Capacitor)
+├── ios/                     # Proyecto nativo iOS (Xcode / Capacitor)
+├── public/                  # Favicons, iconos PWA y manifiesto web
+├── src/
+│   ├── assets/              # Gráficos y recursos multimedia
+│   ├── components/          # Componentes React (HUD, Radar, Minijuego, Modales)
+│   │   ├── HeaderTactical.tsx
+│   │   ├── MainCameraHUD.tsx
+│   │   ├── StrobeRadarDisplay.tsx
+│   │   ├── ObstacleRadarDisplay.tsx
+│   │   ├── OcrSignReaderDisplay.tsx
+│   │   ├── FnafStageMinigame.tsx
+│   │   ├── HorrorSimulatorModal.tsx
+│   │   └── AccessibilitySettingsDrawer.tsx
+│   ├── services/            # Lógica y procesamiento de visión
+│   │   ├── strobeDetector.ts       # Algoritmo de luminancia y Hz
+│   │   ├── obstacleScanner.ts      # Convolución Sobel y distancias
+│   │   ├── ocrService.ts           # Reconocimiento óptico de texto
+│   │   ├── ttsService.ts           # Síntesis de voz asistiva
+│   │   ├── hapticsService.ts       # Control de vibración háptica
+│   │   └── audioFeedbackService.ts # Motor de sonido sintetizado
+│   ├── App.tsx              # Componente principal y orquestador
+│   └── main.tsx             # Punto de entrada de la aplicación
+├── .github/workflows/       # Pipelines de CI/CD (Web, Android, iOS)
+├── capacitor.config.ts      # Configuración de Capacitor
+└── vite.config.ts           # Configuración de compilación Vite
+```
+
+---
+
+## 📜 Licencia y Atribución
+* Proyecto desarrollado para la **Feria de Ciencias y Tecnología (Electriciencia)**.
+* Los algoritmos de detección estroboscópica y visión por computadora son de autoría original basados en las recomendaciones de fotosensibilidad de la **W3C (WCAG 2.2, Criterio 2.3.1)**.
+* La temática retro de animatrónicos y escenario interactivo es utilizada exclusivamente con fines demostrativos, didácticos y de simulación experimental de entornos extremos.

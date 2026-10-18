@@ -18,19 +18,34 @@ android {
     }
     signingConfigs {
         release {
-            def jks = file('luzia-release.jks').exists() ? file('luzia-release.jks') : file('../../luzia-release.jks')
-            if (jks.exists()) {
-                storeFile jks
-                storePassword 'Luzia2026!'
-                keyAlias 'luzia'
-                keyPassword 'Luzia2026!'
+            def keystorePropsFile = rootProject.file("../keystore.properties").exists() ? rootProject.file("../keystore.properties") : rootProject.file("keystore.properties")
+            if (keystorePropsFile.exists()) {
+                def props = new Properties()
+                props.load(new FileInputStream(keystorePropsFile))
+                def customStore = props['storeFile'] ? file(props['storeFile']) : file('luzia-release.jks')
+                if (!customStore.exists()) {
+                    customStore = rootProject.file("../" + props['storeFile'])
+                }
+                storeFile customStore
+                storePassword props['storePassword'] ?: System.getenv("KEYSTORE_PASSWORD")
+                keyAlias props['keyAlias'] ?: System.getenv("KEY_ALIAS") ?: "luzia"
+                keyPassword props['keyPassword'] ?: System.getenv("KEY_PASSWORD") ?: props['storePassword']
+            } else if (System.getenv("KEYSTORE_PASSWORD") != null && file('luzia-release.jks').exists()) {
+                storeFile file('luzia-release.jks')
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS") ?: "luzia"
+                keyPassword System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            if (signingConfigs.release.storeFile != null && signingConfigs.release.storeFile.exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
