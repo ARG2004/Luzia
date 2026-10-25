@@ -5,12 +5,15 @@ export interface ObstacleAnalysisResult {
   proximityIndex: number // 0 (despejado) a 1 (inminente impacto / obstáculo muy cerca)
   hasHazard: boolean
   hazardZone: 'NONE' | 'LEFT' | 'CENTER' | 'RIGHT'
+  meanLuminance?: number // Luminancia media (0 a 255) para calibración de penumbra
+  isExtremeDarkness?: boolean // true si luz ambiente < 14 lux (salón negro)
 }
 
 export class ObstacleScanner {
   /**
    * Aplica convolución de bordes (filtro Sobel simplificado de alto rendimiento)
    * y renderiza la salida visual optimizada en el canvas de visualización.
+   * Cuenta con calibración adaptativa para entornos de oscuridad extrema (salón negro).
    */
   public static processFrame(
     sourceCtx: CanvasRenderingContext2D,
@@ -24,12 +27,25 @@ export class ObstacleScanner {
     try {
       srcData = sourceCtx.getImageData(0, 0, width, height)
     } catch {
-      return { density: 0, proximityIndex: 0, hasHazard: false, hazardZone: 'NONE' }
+      return { density: 0, proximityIndex: 0, hasHazard: false, hazardZone: 'NONE', meanLuminance: 0, isExtremeDarkness: true }
     }
 
     const src = srcData.data
     const outData = targetCtx.createImageData(width, height)
     const out = outData.data
+
+    // 1. Muestreo ultrarrápido de luminancia media para diagnóstico de oscuridad extrema
+    let totalLuma = 0
+    let lumaSamples = 0
+    for (let i = 0; i < src.length; i += 32) {
+      totalLuma += 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]
+      lumaSamples++
+    }
+    const meanLuminance = lumaSamples > 0 ? totalLuma / lumaSamples : 0
+    const isExtremeDarkness = meanLuminance < 15
+
+    // En oscuridad extrema, aumentamos el umbral para filtrar el ruido térmico del sensor de la cámara
+    const effectiveThreshold = isExtremeDarkness ? Math.max(edgeThreshold, 46) : edgeThreshold
 
     // Zona de interés para obstáculos a nivel de suelo: tercio inferior
     const floorStartRow = Math.floor(height * 0.55)
@@ -110,7 +126,7 @@ export class ObstacleScanner {
         const gy = -p00 - 2 * p01 - p02 + p20 + 2 * p21 + p22
 
         const magnitude = Math.sqrt(gx * gx + gy * gy)
-        const isEdge = magnitude > edgeThreshold
+        const isEdge = magnitude > effectiveThreshold
 
         if (isFloor) {
           floorTotalSampled++
@@ -187,6 +203,8 @@ export class ObstacleScanner {
       proximityIndex: density,
       hasHazard: density > 0.18,
       hazardZone,
+      meanLuminance,
+      isExtremeDarkness,
     }
   }
 }

@@ -35,6 +35,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const [isUsingSimulatedFeed, setIsUsingSimulatedFeed] = useState(false)
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
   const [isTorchOn, setIsTorchOn] = useState(false)
+  const [isExtremeDarkness, setIsExtremeDarkness] = useState(false)
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
   const [quickOcrFeedback, setQuickOcrFeedback] = useState<string | null>(null)
 
@@ -42,6 +43,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const simFrameRef = useRef<number>(0)
   const lastDangerSoundTimeRef = useRef<number>(0)
   const lastTapTimeRef = useRef<number>(0)
+  const lastAutoTorchCheckRef = useRef<number>(0)
 
   // Iniciar Stream de Cámara con soporte para Cámara Trasera o Frontal
   const startCamera = useCallback(async (targetFacing: 'environment' | 'user' = 'environment') => {
@@ -165,10 +167,10 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     registerOcrTrigger(triggerOcrScan)
   }, [registerOcrTrigger, triggerOcrScan])
 
-  // Control de linterna / Flash LED para penumbra
-  const handleToggleTorch = async () => {
+  // Control de linterna / Flash LED para penumbra con activación manual o automática
+  const handleToggleTorch = useCallback(async (forcedState?: boolean) => {
     HapticsService.tap()
-    const nextState = !isTorchOn
+    const nextState = forcedState !== undefined ? forcedState : !isTorchOn
     setIsTorchOn(nextState)
 
     try {
@@ -188,7 +190,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     } catch {
       // Ignorar si no hay soporte por hardware
     }
-  }
+  }, [isTorchOn])
 
   // Escaneo rápido de señalética directo desde el HUD
   const handleQuickOcr = async () => {
@@ -343,6 +345,23 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
             lastObstacleUpdateTimeRef.current = now
           }
 
+          // 3. Detección Inteligente de Oscuridad Extrema (Salón Negro / 0 Lux)
+          if (obstacleAnalysis.isExtremeDarkness) {
+            setIsExtremeDarkness(true)
+            if (
+              !isTorchOn &&
+              !isUsingSimulatedFeed &&
+              facingMode === 'environment' &&
+              now - lastAutoTorchCheckRef.current > 5000
+            ) {
+              lastAutoTorchCheckRef.current = now
+              handleToggleTorch(true)
+              TtsService.speak('Oscuridad severa detectada. Activando linterna de asistencia.', false)
+            }
+          } else {
+            setIsExtremeDarkness(false)
+          }
+
           if (obstacleAnalysis.hasHazard && !strobeStatus.isDangerous) {
             // Pulso háptico y beep de proximidad espacial proporcional y direccional
             HapticsService.obstaclePulse(obstacleAnalysis.proximityIndex)
@@ -362,7 +381,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId)
     }
-  }, [filterMode, isUsingSimulatedFeed])
+  }, [filterMode, isUsingSimulatedFeed, facingMode, isTorchOn, handleToggleTorch])
 
   return (
     <div
@@ -410,12 +429,20 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
         {/* Esquinas tácticas y estado */}
         <div className="flex justify-between items-start">
           <div className="w-6 h-6 border-t-2 border-l-2 border-cyan-400" />
-          <div className="text-[10px] font-mono bg-black/75 px-2.5 py-0.5 rounded text-cyan-300 border border-cyan-500/40 backdrop-blur-md">
-            {isUsingSimulatedFeed
-              ? 'MODO: SIMULADOR DE TERROR'
-              : facingMode === 'environment'
-              ? 'STREAM: CÁMARA TRASERA (SUELO & SEÑALES)'
-              : 'STREAM: CÁMARA FRONTAL'}
+          <div className="flex flex-col items-center gap-1">
+            <div className="text-[10px] font-mono bg-black/75 px-2.5 py-0.5 rounded text-cyan-300 border border-cyan-500/40 backdrop-blur-md">
+              {isUsingSimulatedFeed
+                ? 'MODO: SIMULADOR DE TERROR'
+                : facingMode === 'environment'
+                ? 'STREAM: CÁMARA TRASERA (SUELO & SEÑALES)'
+                : 'STREAM: CÁMARA FRONTAL'}
+            </div>
+            {isExtremeDarkness && (
+              <div className="text-[9px] font-mono bg-amber-950/90 text-yellow-300 border border-amber-500/80 px-2 py-0.5 rounded flex items-center gap-1 shadow-[0_0_15px_#f59e0b] animate-pulse">
+                <AlertCircle className="w-3 h-3 text-amber-400" />
+                <span>OSCURIDAD SEVERA (0 LUX) · LUZ ACTIVA</span>
+              </div>
+            )}
           </div>
           <div className="w-6 h-6 border-t-2 border-r-2 border-cyan-400" />
         </div>
