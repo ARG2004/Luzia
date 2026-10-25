@@ -10,6 +10,8 @@ jobs:
   build-and-upload:
     name: Build & Upload to TestFlight
     runs-on: macos-15
+    permissions:
+      contents: write
     environment: production
 
     steps:
@@ -141,10 +143,24 @@ jobs:
 
       - name: Upload IPA Artifact to GitHub
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: Luzia-iOS-IPA
           path: ios/App/build/out/*.ipa
-          retention-days: 14
+          retention-days: 1
+
+      - name: Publish iOS IPA to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: latest
+          name: "Luzía Mobile Build"
+          draft: false
+          prerelease: false
+          files: |
+            ios/App/build/out/*.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to TestFlight via App Store Connect API
         if: ${{ env.APP_STORE_CONNECT_PRIVATE_KEY != '' }}

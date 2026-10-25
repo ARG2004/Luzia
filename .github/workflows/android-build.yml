@@ -10,6 +10,8 @@ jobs:
   build-android:
     name: Build Android Release APK & AAB
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     environment: production
 
     steps:
@@ -68,14 +70,30 @@ jobs:
 
       - name: Upload Android Release APK
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: Luzia-Android-Release-APK
           path: android/app/build/outputs/apk/release/*.apk
-          retention-days: 14
+          retention-days: 1
 
       - name: Upload Android Bundle AAB
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: Luzia-Android-PlayStore-AAB
           path: android/app/build/outputs/bundle/release/*.aab
-          retention-days: 14
+          retention-days: 1
+
+      - name: Publish APK & AAB to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: latest
+          name: "Luzía Mobile Build"
+          draft: false
+          prerelease: false
+          files: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
