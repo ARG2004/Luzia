@@ -43,7 +43,6 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const simFrameRef = useRef<number>(0)
   const lastDangerSoundTimeRef = useRef<number>(0)
   const lastTapTimeRef = useRef<number>(0)
-  const lastAutoTorchCheckRef = useRef<number>(0)
 
   // Iniciar Stream de Cámara con soporte para Cámara Trasera o Frontal
   const startCamera = useCallback(async (targetFacing: 'environment' | 'user' = 'environment') => {
@@ -346,18 +345,9 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
           }
 
           // 3. Detección Inteligente de Oscuridad Extrema (Salón Negro / 0 Lux)
+          // Se activa la ganancia digital nocturna en software sin forzar la lámpara física
           if (obstacleAnalysis.isExtremeDarkness) {
             setIsExtremeDarkness(true)
-            if (
-              !isTorchOn &&
-              !isUsingSimulatedFeed &&
-              facingMode === 'environment' &&
-              now - lastAutoTorchCheckRef.current > 5000
-            ) {
-              lastAutoTorchCheckRef.current = now
-              handleToggleTorch(true)
-              TtsService.speak('Oscuridad severa detectada. Activando linterna de asistencia.', false)
-            }
           } else {
             setIsExtremeDarkness(false)
           }
@@ -440,7 +430,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
             {isExtremeDarkness && (
               <div className="text-[9px] font-mono bg-amber-950/90 text-yellow-300 border border-amber-500/80 px-2 py-0.5 rounded flex items-center gap-1 shadow-[0_0_15px_#f59e0b] animate-pulse">
                 <AlertCircle className="w-3 h-3 text-amber-400" />
-                <span>OSCURIDAD SEVERA (0 LUX) · LUZ ACTIVA</span>
+                <span>{isTorchOn ? 'OSCURIDAD SEVERA · LINTERNA LED ACTIVA' : 'PENUMBRA EXTREMA · GANANCIA NOCTURNA DIGITAL'}</span>
               </div>
             )}
           </div>

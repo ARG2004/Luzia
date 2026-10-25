@@ -108,7 +108,12 @@ export class ObstacleScanner {
 
         const getLum = (px: number, py: number) => {
           const pIdx = (py * width + px) * 4
-          return 0.299 * src[pIdx] + 0.587 * src[pIdx + 1] + 0.114 * src[pIdx + 2]
+          const raw = 0.299 * src[pIdx] + 0.587 * src[pIdx + 1] + 0.114 * src[pIdx + 2]
+          // Si el salón es oscuro y no hay linterna encendida, aplicar ganancia digital de sombras (Gamma Boost)
+          if (isExtremeDarkness && raw > 1) {
+            return Math.sqrt(raw / 255) * 255
+          }
+          return raw
         }
 
         const p00 = getLum(x - 1, y - 1)
