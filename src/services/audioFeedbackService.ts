@@ -60,9 +60,13 @@ export class AudioFeedbackService {
 
   /**
    * Beep de proximidad para obstáculos (cables o desniveles)
-   * Se comporta como sensor de reversa / sónar: a mayor proximidad, tono más alto y mayor cadencia
+   * Se comporta como sensor de reversa / sónar: a mayor proximidad, tono más alto y mayor cadencia.
+   * Soporta audio espacial estéreo para que personas ciegas distingan si el peligro está a la izquierda o derecha.
    */
-  public static playObstacleProximityBeep(intensity: number): void {
+  public static playObstacleProximityBeep(
+    intensity: number,
+    hazardZone: 'NONE' | 'LEFT' | 'CENTER' | 'RIGHT' = 'CENTER'
+  ): void {
     if (this.isMuted) return
     const nowMs = Date.now()
     // Intervalo de cadencia entre 100ms (muy cerca) y 700ms (lejos)
@@ -89,7 +93,17 @@ export class AudioFeedbackService {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08)
 
       osc.connect(gain)
-      gain.connect(ctx.destination)
+
+      // Audio espacial estéreo si el navegador lo soporta
+      if (typeof ctx.createStereoPanner === 'function') {
+        const panner = ctx.createStereoPanner()
+        const panValue = hazardZone === 'LEFT' ? -0.8 : hazardZone === 'RIGHT' ? 0.8 : 0
+        panner.pan.setValueAtTime(panValue, now)
+        gain.connect(panner)
+        panner.connect(ctx.destination)
+      } else {
+        gain.connect(ctx.destination)
+      }
 
       osc.start(now)
       osc.stop(now + 0.09)

@@ -36,7 +36,7 @@
   }
 }
 
-/* FNAF 8-Bit Checkered Floor (Image 3 authentic style) */
+/* FNAF 8-Bit Checkered Floor */
 .fnaf-checkered-floor {
   background-color: #1a1a24;
   background-image: 
@@ -145,4 +145,31 @@
   );
   background-size: 100% 4px, 6px 100%;
   pointer-events: none;
+}
+
+/* Modo Tipografía Accesible de Alta Legibilidad (WCAG AAA) */
+.accessible-text-mode {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+.accessible-text-mode .font-pixel,
+.accessible-text-mode h1,
+.accessible-text-mode h2,
+.accessible-text-mode h3,
+.accessible-text-mode .font-heading {
+  font-family: 'Outfit', sans-serif !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.02em !important;
+}
+
+.accessible-text-mode .font-crt,
+.accessible-text-mode p,
+.accessible-text-mode span,
+.accessible-text-mode button {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  letter-spacing: normal !important;
+}
+
+.accessible-text-mode .font-mono {
+  font-family: 'JetBrains Mono', monospace !important;
 }

@@ -1,6 +1,9 @@
 name: Build & Deploy iOS to TestFlight (macOS Cloud)
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:

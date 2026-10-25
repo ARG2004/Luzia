@@ -9,6 +9,7 @@ import {
   HeartPulse,
   Gamepad2,
   Video,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { HeaderTactical } from './components/HeaderTactical'
 import { MainCameraHUD } from './components/MainCameraHUD'
@@ -16,6 +17,7 @@ import { FnafStageMinigame } from './components/FnafStageMinigame'
 import { StrobeRadarDisplay } from './components/StrobeRadarDisplay'
 import { ObstacleRadarDisplay } from './components/ObstacleRadarDisplay'
 import { OcrSignReaderDisplay } from './components/OcrSignReaderDisplay'
+import { VenueAuditComplianceDisplay, type TelemetryEvent } from './components/VenueAuditComplianceDisplay'
 import { HorrorSimulatorModal } from './components/HorrorSimulatorModal'
 import { AccessibilitySettingsDrawer } from './components/AccessibilitySettingsDrawer'
 import type { StrobeStatus } from './services/strobeDetector'
@@ -25,12 +27,13 @@ import { TtsService } from './services/ttsService'
 import { AudioFeedbackService } from './services/audioFeedbackService'
 import { HapticsService } from './services/hapticsService'
 
-type ActiveTab = 'HUD' | 'STROBE' | 'OCR' | 'DOCS'
+type ActiveTab = 'HUD' | 'STROBE' | 'OCR' | 'AUDIT' | 'DOCS'
 
 export const App: React.FC = () => {
   // Navigation & Tabs
   const [activeTab, setActiveTab] = useState<ActiveTab>('HUD')
-  const [use8BitMinigameView, setUse8BitMinigameView] = useState<boolean>(true)
+  const [use8BitMinigameView, setUse8BitMinigameView] = useState<boolean>(false)
+  const [isAccessibleFont, setIsAccessibleFont] = useState<boolean>(true)
 
   // Real-time sensory states
   const [fps, setFps] = useState<number>(60)
@@ -73,6 +76,10 @@ export const App: React.FC = () => {
   useEffect(() => {
     TtsService.init()
     HapticsService.checkAvailability()
+    const timer = setTimeout(() => {
+      TtsService.speak('Luzía activada. Visor asistivo en tiempo real.')
+    }, 1000)
+    return () => clearTimeout(timer)
   }, [])
 
   // Panic beacon sound loop
@@ -100,18 +107,78 @@ export const App: React.FC = () => {
     }
   }
 
+  // Telemetría & Auditoría B2B de Seguridad
+  const [telemetryEvents, setTelemetryEvents] = useState<TelemetryEvent[]>([])
+
+  const addTelemetryEvent = useCallback((event: Omit<TelemetryEvent, 'id' | 'timestamp'>) => {
+    const timestamp = new Date().toLocaleTimeString()
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
+    setTelemetryEvents(prev => [{ id, timestamp, ...event }, ...prev.slice(0, 49)])
+  }, [])
+
+  // Monitoreo de estrobos para telemetría
+  const lastLoggedStrobeRef = useRef<number>(0)
+  useEffect(() => {
+    if (strobeStatus.isDangerous) {
+      const now = Date.now()
+      if (now - lastLoggedStrobeRef.current > 4000) {
+        addTelemetryEvent({
+          type: 'STROBE',
+          severity: 'CRITICAL',
+          title: `Estrobo Crítico (${strobeStatus.frequencyHz} Hz)`,
+          details: `Luminancia media: ${strobeStatus.currentLuminance}, delta: ${strobeStatus.deltaLuminance}. Rango convulsivo 3-30 Hz.`,
+        })
+        lastLoggedStrobeRef.current = now
+      }
+    }
+  }, [strobeStatus.isDangerous, strobeStatus.frequencyHz, strobeStatus.currentLuminance, strobeStatus.deltaLuminance, addTelemetryEvent])
+
+  // Monitoreo de obstáculos para telemetría
+  const lastLoggedObstacleRef = useRef<number>(0)
+  useEffect(() => {
+    if (obstacleAnalysis.hasHazard) {
+      const now = Date.now()
+      if (now - lastLoggedObstacleRef.current > 5000) {
+        addTelemetryEvent({
+          type: 'OBSTACLE',
+          severity: 'WARNING',
+          title: `Obstáculo / Desnivel en Suelo`,
+          details: `Sector: ${obstacleAnalysis.hazardZone}, Proximidad: ${(obstacleAnalysis.proximityIndex * 100).toFixed(0)}%.`,
+        })
+        lastLoggedObstacleRef.current = now
+      }
+    }
+  }, [obstacleAnalysis.hasHazard, obstacleAnalysis.hazardZone, obstacleAnalysis.proximityIndex, addTelemetryEvent])
+
   // Toggle Panic SOS
   const handleTogglePanic = () => {
     setIsPanicActive(prev => {
       const next = !prev
       if (next) {
         TtsService.speak('¡Alerta Fazbear de auxilio emitida! Personal de asistencia requerido.', true)
+        addTelemetryEvent({
+          type: 'SOS',
+          severity: 'CRITICAL',
+          title: 'Alerta SOS de Auxilio Activada',
+          details: 'El usuario emitió baliza acústica de auxilio para el personal del recinto.',
+        })
       } else {
         TtsService.stop()
       }
       return next
     })
   }
+
+  // Handle OCR result with telemetry logging
+  const handleSignProcessed = useCallback((res: OcrResult) => {
+    setLastOcrResult(res)
+    addTelemetryEvent({
+      type: 'OCR',
+      severity: 'INFO',
+      title: 'Señal de Evacuación Verificada',
+      details: `Letrero: "${res.text}" (Confianza: ${res.confidence}%).`,
+    })
+  }, [addTelemetryEvent])
 
   // Execute OCR scan from UI button
   const handleTriggerOcr = async (): Promise<OcrResult | null> => {
@@ -120,7 +187,7 @@ export const App: React.FC = () => {
     try {
       const res = await triggerOcrRef.current()
       if (res) {
-        setLastOcrResult(res)
+        handleSignProcessed(res)
       }
       return res
     } finally {
@@ -148,6 +215,7 @@ export const App: React.FC = () => {
       setIsHapticEnabled(true)
       setIsAudioEnabled(true)
       setIsTtsEnabled(true)
+      setIsAccessibleFont(true)
     } else if (profile === 'STROBE_CRITICAL') {
       setHighSensitivityStrobe(true)
       setIsHapticEnabled(true)
@@ -162,7 +230,11 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#090814] text-[#e2e8f0] flex flex-col font-crt relative selection:bg-purple-900 selection:text-white">
+    <div
+      className={`min-h-screen bg-[#090814] text-[#e2e8f0] flex flex-col relative selection:bg-purple-900 selection:text-white ${
+        isAccessibleFont ? 'accessible-text-mode' : 'font-crt'
+      }`}
+    >
       {/* Top Header Tactical Fazbear */}
       <HeaderTactical
         isMuted={isMuted}
@@ -172,6 +244,8 @@ export const App: React.FC = () => {
         fps={fps}
         isStrobeAlert={strobeStatus.isDangerous}
         hasObstacleAlert={obstacleAnalysis.hasHazard}
+        isAccessibleFont={isAccessibleFont}
+        onToggleFont={() => setIsAccessibleFont(prev => !prev)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSimulator={() => setIsSimulatorOpen(true)}
       />
@@ -275,7 +349,7 @@ export const App: React.FC = () => {
                 onObstacleUpdate={setObstacleAnalysis}
                 onFpsUpdate={setFps}
                 externalSignToProcess={simulatedSignText}
-                onSignProcessed={res => setLastOcrResult(res)}
+                onSignProcessed={handleSignProcessed}
                 registerOcrTrigger={handleRegisterOcrTrigger}
               />
             </div>
@@ -332,6 +406,18 @@ export const App: React.FC = () => {
               onTriggerScan={handleTriggerOcr}
               lastOcrResult={lastOcrResult}
               isScanning={isOcrScanning}
+            />
+          </div>
+        )}
+
+        {activeTab === 'AUDIT' && (
+          <div className="space-y-4">
+            <VenueAuditComplianceDisplay
+              events={telemetryEvents}
+              onClearEvents={() => setTelemetryEvents([])}
+              currentStrobeHz={strobeStatus.frequencyHz}
+              hasObstacle={obstacleAnalysis.hasHazard}
+              isPanicActive={isPanicActive}
             />
           </div>
         )}
@@ -489,6 +575,21 @@ export const App: React.FC = () => {
         <button
           onClick={() => {
             HapticsService.tap()
+            setActiveTab('AUDIT')
+          }}
+          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
+            activeTab === 'AUDIT'
+              ? 'text-purple-400 font-bold scale-105'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-[7px] sm:text-[8px]">AUDITORÍA</span>
+        </button>
+
+        <button
+          onClick={() => {
+            HapticsService.tap()
             setActiveTab('DOCS')
           }}
           className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
@@ -539,6 +640,8 @@ export const App: React.FC = () => {
         onToggleTts={() => setIsTtsEnabled(prev => !prev)}
         highSensitivityStrobe={highSensitivityStrobe}
         onToggleStrobeSensitivity={() => setHighSensitivityStrobe(prev => !prev)}
+        isAccessibleFont={isAccessibleFont}
+        onToggleFont={() => setIsAccessibleFont(prev => !prev)}
         onApplyProfile={handleApplyProfile}
       />
     </div>

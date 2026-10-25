@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { Camera, Video, AlertCircle } from 'lucide-react'
+import { Camera, Video, AlertCircle, Flashlight, FlashlightOff, ScanText, RefreshCw, CheckCircle2, SwitchCamera } from 'lucide-react'
 import { StrobeDetector, type StrobeStatus } from '../services/strobeDetector'
 import { ObstacleScanner, type ObstacleAnalysisResult, type VisualFilterMode } from '../services/obstacleScanner'
 import { HapticsService } from '../services/hapticsService'
 import { AudioFeedbackService } from '../services/audioFeedbackService'
 import { OcrService, type OcrResult } from '../services/ocrService'
-
+import { TtsService } from '../services/ttsService'
 
 interface MainCameraHUDProps {
   filterMode: VisualFilterMode
@@ -33,33 +33,56 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isUsingSimulatedFeed, setIsUsingSimulatedFeed] = useState(false)
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
+  const [isTorchOn, setIsTorchOn] = useState(false)
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false)
+  const [quickOcrFeedback, setQuickOcrFeedback] = useState<string | null>(null)
 
   // Animación del feed simulado cuando no hay cámara web física disponible
   const simFrameRef = useRef<number>(0)
   const lastDangerSoundTimeRef = useRef<number>(0)
+  const lastTapTimeRef = useRef<number>(0)
 
-  // Iniciar Stream de Cámara
-  const startCamera = useCallback(async () => {
+  // Iniciar Stream de Cámara con soporte para Cámara Trasera o Frontal
+  const startCamera = useCallback(async (targetFacing: 'environment' | 'user' = 'environment') => {
     try {
       setCameraError(null)
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Navegador no soporta acceso a cámara directa.')
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment', // Cámara trasera del celular por defecto
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-        audio: false,
-      })
+      // Detener pistas previas si existían
+      if (videoRef.current && videoRef.current.srcObject) {
+        const oldStream = videoRef.current.srcObject as MediaStream
+        oldStream.getTracks().forEach(t => t.stop())
+      }
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
+      let stream: MediaStream
+      try {
+        // Intento 1: Solicitar la cámara especificada (ej. trasera o frontal)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: targetFacing },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+          audio: false,
+        })
+      } catch {
+        // Fallback 1: Si targetFacing falla (ej. PC/laptop sin cámara trasera), abrir cualquier cámara disponible
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        })
+      }
+
+      const videoEl = videoRef.current
+      if (videoEl) {
+        videoEl.srcObject = stream
+        await videoEl.play()
         setHasCameraPermission(true)
         setIsUsingSimulatedFeed(false)
+        setFacingMode(targetFacing)
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'No se pudo acceder a la cámara.'
@@ -69,12 +92,28 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     }
   }, [])
 
+  // Alternar entre cámara trasera y delantera en teléfonos
+  const handleToggleFacingMode = useCallback(async () => {
+    HapticsService.tap()
+    const nextFacing = facingMode === 'environment' ? 'user' : 'environment'
+    TtsService.speak(
+      nextFacing === 'environment'
+        ? 'Cámara trasera activada. Orientada hacia el suelo y señalética.'
+        : 'Cámara frontal activada.'
+    )
+    await startCamera(nextFacing)
+  }, [facingMode, startCamera])
+
   useEffect(() => {
-    startCamera()
+    const videoEl = videoRef.current
+    const run = async () => {
+      await startCamera('environment')
+    }
+    run()
 
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream
+      if (videoEl && videoEl.srcObject) {
+        const stream = videoEl.srcObject as MediaStream
         stream.getTracks().forEach(track => track.stop())
       }
     }
@@ -99,13 +138,16 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     }
   }, [externalSignToProcess, onSignProcessed])
 
-  // Refs para evitar re-suscripciones y bucles de re-render en loop de 60fps
+  // Refs sincronizados mediante useEffect para evitar accesos indebidos durante el render
   const onStrobeUpdateRef = useRef(onStrobeUpdate)
   const onObstacleUpdateRef = useRef(onObstacleUpdate)
   const onFpsUpdateRef = useRef(onFpsUpdate)
-  onStrobeUpdateRef.current = onStrobeUpdate
-  onObstacleUpdateRef.current = onObstacleUpdate
-  onFpsUpdateRef.current = onFpsUpdate
+
+  useEffect(() => {
+    onStrobeUpdateRef.current = onStrobeUpdate
+    onObstacleUpdateRef.current = onObstacleUpdate
+    onFpsUpdateRef.current = onFpsUpdate
+  }, [onStrobeUpdate, onObstacleUpdate, onFpsUpdate])
 
   const lastStrobeUpdateTimeRef = useRef<number>(0)
   const lastObstacleUpdateTimeRef = useRef<number>(0)
@@ -122,6 +164,70 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   useEffect(() => {
     registerOcrTrigger(triggerOcrScan)
   }, [registerOcrTrigger, triggerOcrScan])
+
+  // Control de linterna / Flash LED para penumbra
+  const handleToggleTorch = async () => {
+    HapticsService.tap()
+    const nextState = !isTorchOn
+    setIsTorchOn(nextState)
+
+    try {
+      const videoEl = videoRef.current
+      if (videoEl && videoEl.srcObject) {
+        const stream = videoEl.srcObject as MediaStream
+        const track = stream.getVideoTracks()[0]
+        if (track) {
+          const applyConstraints = track.applyConstraints as (c: unknown) => Promise<void>
+          if (applyConstraints) {
+            await applyConstraints({
+              advanced: [{ torch: nextState }],
+            })
+          }
+        }
+      }
+    } catch {
+      // Ignorar si no hay soporte por hardware
+    }
+  }
+
+  // Escaneo rápido de señalética directo desde el HUD
+  const handleQuickOcr = async () => {
+    if (isOcrProcessing) return
+    setIsOcrProcessing(true)
+    HapticsService.tap()
+    setQuickOcrFeedback('Enfocando letrero...')
+    TtsService.speak('Analizando señalética al frente...', true)
+
+    try {
+      const result = await triggerOcrScan()
+      if (result && result.text) {
+        onSignProcessed?.(result)
+        AudioFeedbackService.playSuccessChime()
+        setQuickOcrFeedback(`"${result.text}"`)
+        setTimeout(() => setQuickOcrFeedback(null), 4000)
+      } else {
+        setQuickOcrFeedback('Sin texto legible')
+        TtsService.speak('No se detectó letrero legible. Apunte al centro o active la linterna.')
+        setTimeout(() => setQuickOcrFeedback(null), 2500)
+      }
+    } catch {
+      setQuickOcrFeedback('Error al procesar')
+      setTimeout(() => setQuickOcrFeedback(null), 2000)
+    } finally {
+      setIsOcrProcessing(false)
+    }
+  }
+
+  // Doble toque en el visor para disparar lectura OCR rápida sin buscar botones
+  const handleCanvasTouchOrClick = () => {
+    const now = performance.now()
+    if (now - lastTapTimeRef.current < 380) {
+      handleQuickOcr()
+      lastTapTimeRef.current = 0
+    } else {
+      lastTapTimeRef.current = now
+    }
+  }
 
   // Loop de procesamiento de fotogramas (60 FPS)
   useEffect(() => {
@@ -238,9 +344,12 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
           }
 
           if (obstacleAnalysis.hasHazard && !strobeStatus.isDangerous) {
-            // Pulso háptico y beep de proximidad proporcional a la distancia
+            // Pulso háptico y beep de proximidad espacial proporcional y direccional
             HapticsService.obstaclePulse(obstacleAnalysis.proximityIndex)
-            AudioFeedbackService.playObstacleProximityBeep(obstacleAnalysis.proximityIndex)
+            AudioFeedbackService.playObstacleProximityBeep(
+              obstacleAnalysis.proximityIndex,
+              obstacleAnalysis.hazardZone
+            )
           }
         }
       }
@@ -256,7 +365,13 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   }, [filterMode, isUsingSimulatedFeed])
 
   return (
-    <div className="relative w-full aspect-[4/3] sm:aspect-video max-h-[58vh] bg-black rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.8)] select-none">
+    <div
+      onClick={handleCanvasTouchOrClick}
+      className="relative w-full aspect-[4/3] sm:aspect-video max-h-[58vh] bg-black rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.8)] select-none cursor-pointer"
+      title="Doble toque en cualquier lugar para leer señalética al frente por voz"
+      role="region"
+      aria-label="Visor HUD Asistivo de Cámara y Escaneo Sensorial"
+    >
       {/* Video oculto para captura de cámara */}
       <video
         ref={videoRef}
@@ -285,32 +400,48 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
       {/* Capa de Efectos de Visión Nocturna / Scanlines */}
       <div className="absolute inset-0 scanlines-overlay opacity-60 pointer-events-none" />
 
+      {/* Linterna / Luz auxiliar en pantalla */}
+      {isTorchOn && (
+        <div className="absolute inset-0 bg-amber-100/10 pointer-events-none mix-blend-screen animate-pulse" />
+      )}
+
       {/* Retícula Táctica de Escaneo HUD */}
-      <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
-        {/* Esquinas tácticas */}
+      <div className="absolute inset-0 pointer-events-none p-3 sm:p-4 flex flex-col justify-between">
+        {/* Esquinas tácticas y estado */}
         <div className="flex justify-between items-start">
           <div className="w-6 h-6 border-t-2 border-l-2 border-cyan-400" />
-          <div className="text-[10px] font-mono bg-black/60 px-2 py-0.5 rounded text-cyan-300 border border-cyan-500/30">
-            {isUsingSimulatedFeed ? 'MODO: SIMULADOR DE TERROR' : 'STREAM: CÁMARA TRASERA'}
+          <div className="text-[10px] font-mono bg-black/75 px-2.5 py-0.5 rounded text-cyan-300 border border-cyan-500/40 backdrop-blur-md">
+            {isUsingSimulatedFeed
+              ? 'MODO: SIMULADOR DE TERROR'
+              : facingMode === 'environment'
+              ? 'STREAM: CÁMARA TRASERA (SUELO & SEÑALES)'
+              : 'STREAM: CÁMARA FRONTAL'}
           </div>
           <div className="w-6 h-6 border-t-2 border-r-2 border-cyan-400" />
         </div>
 
         {/* Zona Central: Retícula de Enfoque para Señalética */}
         <div className="self-center relative flex items-center justify-center">
-          <div className="w-32 h-20 border border-dashed border-cyan-400/40 rounded-lg flex items-center justify-center">
-            <span className="text-[9px] font-mono text-cyan-300/80 uppercase">
-              ENFOCAR SEÑAL
+          <div
+            className={`w-36 h-22 sm:w-44 sm:h-28 border-2 border-dashed rounded-xl flex items-center justify-center transition-all ${
+              isOcrProcessing
+                ? 'border-cyan-300 bg-cyan-950/40 shadow-[0_0_20px_#00f0ff]'
+                : 'border-cyan-400/50 bg-black/30'
+            }`}
+          >
+            <span className="text-[10px] font-mono font-bold text-cyan-200 uppercase tracking-wider text-center px-1">
+              {isOcrProcessing ? 'ANALIZANDO...' : 'ENFOCAR SEÑAL'}
             </span>
           </div>
-          <div className="absolute w-2 h-2 rounded-full bg-cyan-400" />
+          <div className="absolute w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
         </div>
 
         {/* Zona Inferior: Retícula de Suelo y Obstáculos */}
         <div className="relative">
-          <div className="w-full border-t border-dashed border-amber-500/40 mb-1 flex justify-between text-[9px] font-mono text-amber-400 px-1">
-            <span>◄ SECTOR DE PISO / CABLES</span>
-            <span>DETECCIÓN DE DESNIVELES ►</span>
+          <div className="w-full border-t border-dashed border-amber-500/50 mb-1 flex justify-between text-[9px] sm:text-[10px] font-mono text-amber-300 px-1 bg-black/50 rounded py-0.5">
+            <span>◄ SECTOR SUELO / CABLES</span>
+            <span className="text-[8px] text-gray-400 hidden sm:inline">DOBLE TOQUE: LEER SEÑAL</span>
+            <span>DESNIVELES ►</span>
           </div>
           <div className="flex justify-between items-end">
             <div className="w-6 h-6 border-b-2 border-l-2 border-amber-400" />
@@ -319,31 +450,105 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
         </div>
       </div>
 
-      {/* Controles Flotantes sobre la Cámara */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
+      {/* Controles Flotantes Superiores sobre la Cámara */}
+      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-20">
         <button
-          onClick={() => {
+          onClick={e => {
+            e.stopPropagation()
             HapticsService.tap()
             if (isUsingSimulatedFeed) {
-              startCamera()
+              startCamera(facingMode)
             } else {
               setIsUsingSimulatedFeed(true)
             }
           }}
-          className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-black/70 hover:bg-black/90 border border-white/20 text-white flex items-center gap-1.5 backdrop-blur-md transition-all"
+          className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-black/80 hover:bg-black border border-white/20 text-white flex items-center gap-1.5 backdrop-blur-md transition-all shadow-md active:scale-95"
+          aria-label={isUsingSimulatedFeed ? 'Activar cámara física' : 'Simular entorno'}
         >
-          {isUsingSimulatedFeed ? <Camera className="w-3.5 h-3.5" /> : <Video className="w-3.5 h-3.5" />}
-          <span>{isUsingSimulatedFeed ? 'ACTIVAR CÁMARA' : 'SIMULAR ENTORNO'}</span>
+          {isUsingSimulatedFeed ? <Camera className="w-3.5 h-3.5 text-cyan-400" /> : <Video className="w-3.5 h-3.5 text-emerald-400" />}
+          <span>{isUsingSimulatedFeed ? 'CÁMARA' : 'SIMULAR'}</span>
+        </button>
+
+        {/* Botón Alternar Cámara Trasera / Frontal para Teléfonos */}
+        {!isUsingSimulatedFeed && (
+          <button
+            onClick={e => {
+              e.stopPropagation()
+              handleToggleFacingMode()
+            }}
+            className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-black/80 hover:bg-black border border-cyan-500/50 text-cyan-300 flex items-center gap-1.5 backdrop-blur-md transition-all shadow-md active:scale-95"
+            title={facingMode === 'environment' ? 'Cambiar a cámara frontal' : 'Cambiar a cámara trasera'}
+            aria-label="Alternar entre cámara frontal y trasera"
+          >
+            <SwitchCamera className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">{facingMode === 'environment' ? 'TRASERA' : 'FRONTAL'}</span>
+          </button>
+        )}
+
+        {/* Botón Linterna LED para penumbra */}
+        <button
+          onClick={e => {
+            e.stopPropagation()
+            handleToggleTorch()
+          }}
+          className={`text-[11px] font-mono px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 backdrop-blur-md transition-all shadow-md active:scale-95 ${
+            isTorchOn
+              ? 'bg-amber-500 text-black border-amber-300 font-bold shadow-[0_0_15px_#f59e0b]'
+              : 'bg-black/80 hover:bg-black text-amber-300 border-amber-500/40'
+          }`}
+          title="Encender Linterna LED para iluminar el camino en penumbra"
+          aria-label={isTorchOn ? 'Apagar linterna' : 'Encender linterna'}
+        >
+          {isTorchOn ? <Flashlight className="w-3.5 h-3.5" /> : <FlashlightOff className="w-3.5 h-3.5" />}
+          <span className="hidden sm:inline">{isTorchOn ? 'LUZ ON' : 'LINTERNA'}</span>
         </button>
       </div>
 
+      {/* Botón Flotante Superior Derecho: Escaneo Rápido de Señales */}
+      <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20">
+        <button
+          onClick={e => {
+            e.stopPropagation()
+            handleQuickOcr()
+          }}
+          disabled={isOcrProcessing}
+          className={`text-[11px] font-mono px-3 py-1.5 rounded-lg border flex items-center gap-1.5 backdrop-blur-md transition-all shadow-lg active:scale-95 ${
+            isOcrProcessing
+              ? 'bg-cyan-600 text-white border-cyan-300 animate-pulse'
+              : 'bg-cyan-950/90 hover:bg-cyan-900 border-cyan-400/80 text-cyan-200 shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+          }`}
+          title="Escanear letrero al frente y leer en voz alta"
+          aria-label="Leer letrero al frente"
+        >
+          {isOcrProcessing ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>LEYENDO...</span>
+            </>
+          ) : (
+            <>
+              <ScanText className="w-3.5 h-3.5 text-cyan-300" />
+              <span>LEER SEÑAL</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Toast informativo flotante de resultado OCR */}
+      {quickOcrFeedback && (
+        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-black/90 border border-cyan-400 text-cyan-200 text-xs font-mono flex items-center gap-2 shadow-[0_0_20px_rgba(0,240,255,0.5)] z-30 animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="font-bold">{quickOcrFeedback}</span>
+        </div>
+      )}
+
       {/* Mensaje si la cámara falló */}
       {cameraError && hasCameraPermission === false && (
-        <div className="absolute bottom-3 left-3 right-3 p-2 rounded-xl bg-black/80 border border-amber-500/40 text-amber-300 text-[11px] font-mono flex items-center gap-2 z-20 backdrop-blur-md">
+        <div className="absolute bottom-3 left-3 right-3 p-2 rounded-xl bg-black/85 border border-amber-500/50 text-amber-300 text-[11px] font-mono flex items-center gap-2 z-20 backdrop-blur-md">
           <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
           <span>
-            Cámara no disponible en este dispositivo ({cameraError}). Modo simulación interactiva
-            activado para pruebas sensoriales.
+            Cámara física no disponible ({cameraError}). Simulador interactivo de terror activado
+            para evaluación sensorial.
           </span>
         </div>
       )}

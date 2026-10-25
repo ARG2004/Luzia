@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, Sliders, Vibrate, Volume2, Mic, Eye, ShieldAlert } from 'lucide-react'
+import { X, Sliders, Vibrate, Volume2, Mic, Eye, ShieldAlert, Type } from 'lucide-react'
 import { HapticsService } from '../services/hapticsService'
 
 interface AccessibilitySettingsDrawerProps {
@@ -13,6 +13,8 @@ interface AccessibilitySettingsDrawerProps {
   onToggleTts: () => void
   highSensitivityStrobe: boolean
   onToggleStrobeSensitivity: () => void
+  isAccessibleFont: boolean
+  onToggleFont: () => void
   onApplyProfile: (profile: 'LOW_VISION' | 'STROBE_CRITICAL' | 'SILENT_HAPTIC') => void
 }
 
@@ -27,6 +29,8 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
   onToggleTts,
   highSensitivityStrobe,
   onToggleStrobeSensitivity,
+  isAccessibleFont,
+  onToggleFont,
   onApplyProfile,
 }) => {
   if (!isOpen) return null
@@ -48,6 +52,7 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
               onClose()
             }}
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white"
+            aria-label="Cerrar ajustes"
           >
             <X className="w-5 h-5" />
           </button>
@@ -69,7 +74,7 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
             >
               <Eye className="w-4 h-4 text-emerald-400 mb-1" />
               <div className="text-xs font-bold text-emerald-300 font-mono">BAJA VISIÓN</div>
-              <div className="text-[10px] text-gray-400">Bordes neón + sónar</div>
+              <div className="text-[10px] text-gray-400">Bordes neón + texto claro</div>
             </button>
 
             <button
@@ -104,6 +109,37 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
             CANALES DE RETROALIMENTACIÓN SENSORIAL
           </span>
 
+          {/* Tipografía Alta Legibilidad vs Pixel Retro */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-white/5">
+            <div className="flex items-center gap-3">
+              <Type className="w-5 h-5 text-purple-400" />
+              <div>
+                <div className="text-sm font-bold text-white">Tipografía de Alta Legibilidad</div>
+                <div className="text-xs text-gray-400">
+                  {isAccessibleFont
+                    ? 'Letra clara y nítida (Recomendado para baja visión)'
+                    : 'Modo Pixel Retro CRT (Temática FNAF)'}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                HapticsService.tap()
+                onToggleFont()
+              }}
+              className={`w-12 h-6 rounded-full transition-all p-0.5 ${
+                isAccessibleFont ? 'bg-purple-500' : 'bg-gray-700'
+              }`}
+              aria-label="Alternar tipografía de alta legibilidad"
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white transition-all ${
+                  isAccessibleFont ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
           {/* Háptico */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-white/5">
             <div className="flex items-center gap-3">
@@ -121,6 +157,7 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
               className={`w-12 h-6 rounded-full transition-all p-0.5 ${
                 isHapticEnabled ? 'bg-cyan-500' : 'bg-gray-700'
               }`}
+              aria-label="Alternar vibración háptica"
             >
               <div
                 className={`w-5 h-5 rounded-full bg-white transition-all ${
@@ -135,8 +172,8 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
             <div className="flex items-center gap-3">
               <Volume2 className="w-5 h-5 text-emerald-400" />
               <div>
-                <div className="text-sm font-bold text-white">Beeps de Proximidad y Alarma</div>
-                <div className="text-xs text-gray-400">Sónar acústico para cables y desniveles</div>
+                <div className="text-sm font-bold text-white">Beeps Espaciales y Sónar</div>
+                <div className="text-xs text-gray-400">Audio direccional estéreo para cables y suelo</div>
               </div>
             </div>
             <button
@@ -147,6 +184,7 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
               className={`w-12 h-6 rounded-full transition-all p-0.5 ${
                 isAudioEnabled ? 'bg-emerald-500' : 'bg-gray-700'
               }`}
+              aria-label="Alternar avisos de audio"
             >
               <div
                 className={`w-5 h-5 rounded-full bg-white transition-all ${
@@ -173,6 +211,7 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
               className={`w-12 h-6 rounded-full transition-all p-0.5 ${
                 isTtsEnabled ? 'bg-amber-500' : 'bg-gray-700'
               }`}
+              aria-label="Alternar voz sintética asistiva"
             >
               <div
                 className={`w-5 h-5 rounded-full bg-white transition-all ${
@@ -203,6 +242,7 @@ export const AccessibilitySettingsDrawer: React.FC<AccessibilitySettingsDrawerPr
               className={`w-12 h-6 rounded-full transition-all p-0.5 ${
                 highSensitivityStrobe ? 'bg-red-500' : 'bg-gray-700'
               }`}
+              aria-label="Alternar sensibilidad fotosensible alta"
             >
               <div
                 className={`w-5 h-5 rounded-full bg-white transition-all ${

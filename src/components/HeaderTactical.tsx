@@ -1,5 +1,5 @@
 import React from 'react'
-import { Volume2, VolumeX, AlertTriangle, ShieldCheck, Zap } from 'lucide-react'
+import { Volume2, VolumeX, AlertTriangle, ShieldCheck, Zap, Type } from 'lucide-react'
 import { HapticsService } from '../services/hapticsService'
 
 interface HeaderTacticalProps {
@@ -10,6 +10,8 @@ interface HeaderTacticalProps {
   fps: number
   isStrobeAlert: boolean
   hasObstacleAlert: boolean
+  isAccessibleFont: boolean
+  onToggleFont: () => void
   onOpenSettings: () => void
   onOpenSimulator: () => void
 }
@@ -22,10 +24,12 @@ export const HeaderTactical: React.FC<HeaderTacticalProps> = ({
   fps,
   isStrobeAlert,
   hasObstacleAlert,
+  isAccessibleFont,
+  onToggleFont,
   onOpenSimulator,
 }) => {
   return (
-    <header className="w-full bg-[#090814]/95 backdrop-blur-md border-b-4 border-[#3c3468] px-3 sm:px-5 py-2.5 flex items-center justify-between z-30 select-none font-crt">
+    <header className="w-full bg-[#090814]/95 backdrop-blur-md border-b-4 border-[#3c3468] px-3 sm:px-5 py-2.5 flex items-center justify-between z-30 select-none font-crt" role="banner">
       {/* Brand & Fazbear Status */}
       <div className="flex items-center gap-2.5 sm:gap-3">
         {/* Pixel Freddy Hat / Security Badge */}
@@ -70,14 +74,14 @@ export const HeaderTactical: React.FC<HeaderTacticalProps> = ({
       <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Status Pills */}
         {isStrobeAlert && (
-          <div className="hidden sm:flex items-center gap-1 font-pixel text-[8px] px-2 py-1 rounded bg-red-600/40 text-red-200 border border-red-500 animate-pulse">
+          <div className="hidden sm:flex items-center gap-1 font-pixel text-[8px] px-2 py-1 rounded bg-red-600/40 text-red-200 border border-red-500 animate-pulse" role="alert" aria-live="assertive">
             <AlertTriangle className="w-3 h-3 text-red-400" />
             <span>¡ESTROBO!</span>
           </div>
         )}
 
         {hasObstacleAlert && !isStrobeAlert && (
-          <div className="hidden sm:flex items-center gap-1 font-pixel text-[8px] px-2 py-1 rounded bg-amber-600/40 text-amber-200 border border-amber-500 animate-pulse">
+          <div className="hidden sm:flex items-center gap-1 font-pixel text-[8px] px-2 py-1 rounded bg-amber-600/40 text-amber-200 border border-amber-500 animate-pulse" role="alert" aria-live="polite">
             <Zap className="w-3 h-3 text-amber-400" />
             <span>OBSTÁCULO</span>
           </div>
@@ -89,6 +93,24 @@ export const HeaderTactical: React.FC<HeaderTacticalProps> = ({
             <span>SEGURO</span>
           </div>
         )}
+
+        {/* Conmutador de Tipografía Alta Legibilidad / Pixel Retro */}
+        <button
+          onClick={() => {
+            HapticsService.tap()
+            onToggleFont()
+          }}
+          className={`font-mono text-[9px] px-2 py-1.5 rounded border transition-all flex items-center gap-1 ${
+            isAccessibleFont
+              ? 'bg-cyan-950/80 text-cyan-200 border-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.3)]'
+              : 'bg-black/60 text-gray-400 border-gray-700 hover:text-white'
+          }`}
+          title={isAccessibleFont ? 'Cambiar a tipografía Pixel Retro FNAF' : 'Cambiar a tipografía Alta Legibilidad (WCAG)'}
+          aria-label={isAccessibleFont ? 'Tipografía Alta Legibilidad activa. Clic para cambiar a retro' : 'Tipografía Retro activa. Clic para cambiar a legible'}
+        >
+          <Type className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">{isAccessibleFont ? 'LEGIBLE' : 'RETRO'}</span>
+        </button>
 
         {/* Terror Simulator Button */}
         <button
@@ -131,6 +153,7 @@ export const HeaderTactical: React.FC<HeaderTacticalProps> = ({
               : 'bg-red-950/80 hover:bg-red-900 border-red-500/60 text-red-300'
           }`}
           title="Botón de Pánico / Alerta de Auxilio"
+          aria-label="Botón de Pánico SOS"
         >
           <AlertTriangle className={`w-3.5 h-3.5 ${isPanicActive ? 'animate-bounce' : ''}`} />
           <span>SOS</span>

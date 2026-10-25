@@ -20,17 +20,17 @@ export const HorrorSimulatorModal: React.FC<HorrorSimulatorModalProps> = ({
 
   // Efecto de parpadeo estroboscópico en el simulador
   useEffect(() => {
-    if (!isStrobing) {
-      setStrobeFlashState(false)
-      return
-    }
+    if (!isStrobing) return
 
     const intervalMs = 1000 / (strobeHz * 2) // Medio ciclo
     const timer = setInterval(() => {
       setStrobeFlashState(prev => !prev)
     }, intervalMs)
 
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      setStrobeFlashState(false)
+    }
   }, [isStrobing, strobeHz])
 
   if (!isOpen) return null
