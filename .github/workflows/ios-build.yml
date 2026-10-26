@@ -87,6 +87,14 @@ jobs:
           cd ios/App
           xcodebuild -resolvePackageDependencies -project App.xcodeproj -scheme App
 
+      - name: Configure iOS Version and Encryption Exemption
+        run: |
+          BUILD_NUM="${{ github.run_number }}"
+          echo "Setting iOS CFBundleVersion to $BUILD_NUM and CFBundleShortVersionString to 1.2.0"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUM" ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.0" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.2.0" ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist
+
       - name: Build Xcode Archive
         run: |
           cd ios/App
@@ -98,7 +106,9 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="X423NH338U" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-            CODE_SIGN_IDENTITY="Apple Distribution"
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            MARKETING_VERSION="1.2.0" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
       - name: Create Export Options Plist
         run: |
@@ -182,10 +192,15 @@ jobs:
           # Subir a TestFlight usando xcrun altool oficial de Apple
           IPA_PATH=$(find ios/App/build/out -name "*.ipa" | head -n 1)
           echo "Subiendo a TestFlight: $IPA_PATH"
-          xcrun altool --upload-app \
+          UPLOAD_OUT=$(xcrun altool --upload-app \
             -f "$IPA_PATH" \
             -t ios \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1)
+          echo "$UPLOAD_OUT"
+          if echo "$UPLOAD_OUT" | grep -qiE "ERROR:.*Failed to upload|ENTITY_ERROR"; then
+            echo "::error::Apple App Store Connect rechazó la subida a TestFlight."
+            exit 1
+          fi
 
 
