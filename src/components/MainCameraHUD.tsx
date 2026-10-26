@@ -155,12 +155,24 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const lastStrobeDangerStateRef = useRef<boolean>(false)
   const lastHazardStateRef = useRef<boolean>(false)
 
-  // Método de escaneo OCR expuesto
+  // Método de escaneo OCR expuesto con captura en alta resolución nativa de la cámara
   const triggerOcrScan = useCallback(async (): Promise<OcrResult | null> => {
+    const video = videoRef.current
+    if (!isUsingSimulatedFeed && video && video.readyState >= 2 && video.videoWidth > 0) {
+      // Capturar fotograma en alta resolución directamente del stream del sensor (HD/Full HD)
+      const hdCanvas = document.createElement('canvas')
+      hdCanvas.width = video.videoWidth
+      hdCanvas.height = video.videoHeight
+      const hdCtx = hdCanvas.getContext('2d', { willReadFrequently: true })
+      if (hdCtx) {
+        hdCtx.drawImage(video, 0, 0, hdCanvas.width, hdCanvas.height)
+        return await OcrService.recognizeText(hdCanvas)
+      }
+    }
     const canvas = displayCanvasRef.current || sourceCanvasRef.current
     if (!canvas) return null
     return await OcrService.recognizeText(canvas)
-  }, [])
+  }, [isUsingSimulatedFeed])
 
   useEffect(() => {
     registerOcrTrigger(triggerOcrScan)

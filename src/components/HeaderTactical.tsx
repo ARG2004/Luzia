@@ -29,12 +29,20 @@ export const HeaderTactical: React.FC<HeaderTacticalProps> = ({
   onOpenSimulator,
 }) => {
   return (
-    <header className="w-full bg-[#090814]/95 backdrop-blur-md border-b-4 border-[#3c3468] px-3 sm:px-5 py-2.5 flex items-center justify-between z-30 select-none font-crt" role="banner">
+    <header
+      className="w-full bg-[#090814]/95 backdrop-blur-md border-b-4 border-[#3c3468] px-2.5 sm:px-5 py-2.5 flex items-center justify-between z-30 select-none font-crt transition-all"
+      style={{
+        paddingTop: 'max(0.625rem, env(safe-area-inset-top, 0px))',
+        paddingLeft: 'max(0.625rem, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(0.625rem, env(safe-area-inset-right, 0px))',
+      }}
+      role="banner"
+    >
       {/* Brand & Fazbear Status */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {/* Pixel Freddy Hat / Security Badge */}
-        <div className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-[#1a1636] border-2 border-[#52468f] shadow-[0_0_15px_rgba(82,70,143,0.5)]">
-          <svg width="24" height="24" viewBox="0 0 24 24" className="[image-rendering:pixelated]">
+        <div className="relative shrink-0 flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-[#1a1636] border-2 border-[#52468f] shadow-[0_0_15px_rgba(82,70,143,0.5)]">
+          <svg width="22" height="22" viewBox="0 0 24 24" className="[image-rendering:pixelated]">
             {/* Top Hat */}
             <rect x="8" y="2" width="8" height="6" fill="#141414" />
             <rect x="6" y="7" width="12" height="2" fill="#292929" />
@@ -51,21 +59,21 @@ export const HeaderTactical: React.FC<HeaderTacticalProps> = ({
             {/* Bowtie */}
             <rect x="9" y="20" width="6" height="2" fill="#111111" />
           </svg>
-          <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#00ff66] border border-black shadow-[0_0_8px_#00ff66]" />
+          <span className="absolute -bottom-1 -right-1 w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-[#00ff66] border border-black shadow-[0_0_8px_#00ff66]" />
         </div>
 
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-pixel text-xs sm:text-sm tracking-wider text-white">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <h1 className="font-pixel text-[11px] sm:text-sm tracking-wider text-white truncate">
               LUZÍA
             </h1>
-            <span className="font-pixel text-[8px] px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/60 text-red-300">
-              FAZBEAR OS
+            <span className="font-pixel text-[7px] sm:text-[8px] px-1 sm:px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/60 text-red-300 shrink-0">
+              FAZBEAR
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-green-400 flex items-center gap-1.5 font-crt tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-[#00ff66] animate-ping" />
-            MONITOREO ACTIVO · NIGHT 1 · {fps} FPS
+          <p className="text-[10px] sm:text-xs text-green-400 flex items-center gap-1 font-crt tracking-wider truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66] animate-ping shrink-0" />
+            ACTIVO · {fps} FPS
           </p>
         </div>
       </div>

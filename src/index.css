@@ -2,6 +2,10 @@
 
 @layer base {
   :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
     --color-bg-dark: #07090e;
     --color-surface: #0e121b;
     --color-surface-elevated: #161c28;
@@ -13,6 +17,18 @@
     --font-body: 'VT323', monospace, sans-serif;
     --font-mono: 'VT323', monospace;
     --font-pixel: 'Press Start 2P', cursive;
+  }
+
+  /* Safe Area Utilities for Android Navigation Bar and iOS Notch */
+  .safe-top-padded {
+    padding-top: max(0.625rem, env(safe-area-inset-top, 0px));
+  }
+  .safe-bottom-padded {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+  .safe-x-padded {
+    padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
   }
 
   body {

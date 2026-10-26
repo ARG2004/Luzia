@@ -294,8 +294,8 @@ export const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Contenido Principal */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-4">
+      {/* Contenido Principal con padding inferior para no solapar la barra fija */}
+      <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-4 pb-28 sm:pb-32">
         {/* Banner de Estado de Peligro Global si hay destello */}
         {strobeStatus.isDangerous && (
           <div className="w-full bg-red-600 text-white p-3 rounded-xl border-4 border-red-400 flex items-center justify-between shadow-[0_0_35px_rgba(255,30,66,0.9)] animate-pulse">
@@ -525,21 +525,32 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Barra de Navegación Inferior Móvil Fazbear */}
-      <nav className="w-full bg-[#080712]/95 backdrop-blur-md border-t-4 border-[#3c3468] px-2 sm:px-4 py-2 flex items-center justify-around z-30 select-none font-pixel">
+      {/* Barra de Navegación Inferior Móvil Fazbear con Soporte Safe-Area Nativo (Android/iOS) */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 w-full bg-[#080712]/95 backdrop-blur-md border-t-4 border-[#3c3468] flex items-center justify-between z-40 select-none font-pixel shadow-[0_-8px_25px_rgba(0,0,0,0.8)]"
+        style={{
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))',
+          paddingLeft: 'max(0.35rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(0.35rem, env(safe-area-inset-right, 0px))',
+          paddingTop: '0.4rem',
+        }}
+        role="navigation"
+        aria-label="Navegación principal de Luzía"
+      >
         <button
           onClick={() => {
             HapticsService.tap()
             setActiveTab('HUD')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
+          className={`flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all ${
             activeTab === 'HUD'
               ? 'text-cyan-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
+          title="Ver escenario y visor de cámara"
         >
-          <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="text-[7px] sm:text-[8px]">ESCENARIO</span>
+          <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">ESCENARIO</span>
         </button>
 
         <button
@@ -547,14 +558,15 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setActiveTab('STROBE')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
+          className={`flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all ${
             activeTab === 'STROBE'
               ? 'text-red-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
+          title="Monitoreo de estrobos y fotosensibilidad"
         >
-          <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="text-[7px] sm:text-[8px]">ESTROBOS</span>
+          <Activity className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">ESTROBOS</span>
         </button>
 
         <button
@@ -562,14 +574,15 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setActiveTab('OCR')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
+          className={`flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all ${
             activeTab === 'OCR'
               ? 'text-amber-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
+          title="Lector de señales nocturnas por voz"
         >
-          <ScanText className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="text-[7px] sm:text-[8px]">SEÑALES</span>
+          <ScanText className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">SEÑALES</span>
         </button>
 
         <button
@@ -577,14 +590,15 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setActiveTab('AUDIT')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
+          className={`flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all ${
             activeTab === 'AUDIT'
               ? 'text-purple-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
+          title="Registro de eventos y auditoría"
         >
-          <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="text-[7px] sm:text-[8px]">AUDITORÍA</span>
+          <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">AUDITORÍA</span>
         </button>
 
         <button
@@ -592,14 +606,15 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setActiveTab('DOCS')
           }}
-          className={`flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg transition-all ${
+          className={`flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all ${
             activeTab === 'DOCS'
               ? 'text-emerald-400 font-bold scale-105'
               : 'text-gray-400 hover:text-white'
           }`}
+          title="Manual técnico y normativas de seguridad"
         >
-          <FileCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="text-[7px] sm:text-[8px]">MANUAL</span>
+          <FileCheck className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">MANUAL</span>
         </button>
 
         <button
@@ -607,10 +622,11 @@ export const App: React.FC = () => {
             HapticsService.tap()
             setIsSettingsOpen(true)
           }}
-          className="flex flex-col items-center gap-1 py-1.5 px-2 rounded-lg text-gray-400 hover:text-white transition-all"
+          className="flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-0.5 rounded-lg text-gray-400 hover:text-white transition-all"
+          title="Ajustes de accesibilidad"
         >
-          <Sliders className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="text-[7px] sm:text-[8px]">AJUSTES</span>
+          <Sliders className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">AJUSTES</span>
         </button>
       </nav>
 
