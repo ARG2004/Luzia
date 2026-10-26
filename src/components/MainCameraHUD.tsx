@@ -36,6 +36,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
   const [isTorchOn, setIsTorchOn] = useState(false)
   const [isExtremeDarkness, setIsExtremeDarkness] = useState(false)
+  const [showDarknessPrompt, setShowDarknessPrompt] = useState(false)
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
   const [quickOcrFeedback, setQuickOcrFeedback] = useState<string | null>(null)
 
@@ -43,6 +44,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const simFrameRef = useRef<number>(0)
   const lastDangerSoundTimeRef = useRef<number>(0)
   const lastTapTimeRef = useRef<number>(0)
+  const lastDarknessVoiceAlertRef = useRef<number>(0)
 
   // Iniciar Stream de Cámara con soporte para Cámara Trasera o Frontal
   const startCamera = useCallback(async (targetFacing: 'environment' | 'user' = 'environment') => {
@@ -178,11 +180,19 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     registerOcrTrigger(triggerOcrScan)
   }, [registerOcrTrigger, triggerOcrScan])
 
-  // Control de linterna / Flash LED para penumbra con activación manual o automática
+  // Control de linterna / Flash LED para penumbra con activación manual o táctil
   const handleToggleTorch = useCallback(async (forcedState?: boolean) => {
     HapticsService.tap()
     const nextState = forcedState !== undefined ? forcedState : !isTorchOn
     setIsTorchOn(nextState)
+
+    if (nextState) {
+      setShowDarknessPrompt(false)
+      AudioFeedbackService.playSuccessChime()
+      TtsService.speak('Linterna activada. Escaneando suelo.', true)
+    } else {
+      TtsService.speak('Linterna desactivada.', true)
+    }
 
     try {
       const videoEl = videoRef.current
@@ -231,8 +241,12 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     }
   }
 
-  // Doble toque en el visor para disparar lectura OCR rápida sin buscar botones
+  // Doble toque en el visor para disparar lectura OCR rápida o toque para encender linterna en oscuridad
   const handleCanvasTouchOrClick = () => {
+    if (showDarknessPrompt && !isTorchOn) {
+      handleToggleTorch(true)
+      return
+    }
     const now = performance.now()
     if (now - lastTapTimeRef.current < 380) {
       handleQuickOcr()
@@ -356,12 +370,22 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
             lastObstacleUpdateTimeRef.current = now
           }
 
-          // 3. Detección Inteligente de Oscuridad Extrema (Salón Negro / 0 Lux)
-          // Se activa la ganancia digital nocturna en software sin forzar la lámpara física
-          if (obstacleAnalysis.isExtremeDarkness) {
+          // 3. Detección Inteligente de Oscuridad Extrema (Salón Negro / < 14 Lux)
+          if (obstacleAnalysis.isExtremeDarkness && !isTorchOn) {
             setIsExtremeDarkness(true)
+            setShowDarknessPrompt(true)
+            if (now - lastDarknessVoiceAlertRef.current > 16000) {
+              TtsService.speak(
+                'Oscuridad extrema detectada. Toca la pantalla para activar la linterna asistiva y escanear el suelo.'
+              )
+              HapticsService.tap()
+              lastDarknessVoiceAlertRef.current = now
+            }
           } else {
             setIsExtremeDarkness(false)
+            if (isTorchOn || !obstacleAnalysis.isExtremeDarkness) {
+              setShowDarknessPrompt(false)
+            }
           }
 
           if (obstacleAnalysis.hasHazard && !strobeStatus.isDangerous) {
@@ -568,6 +592,34 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-black/90 border border-cyan-400 text-cyan-200 text-xs font-mono flex items-center gap-2 shadow-[0_0_20px_rgba(0,240,255,0.5)] z-30 animate-fade-in">
           <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
           <span className="font-bold">{quickOcrFeedback}</span>
+        </div>
+      )}
+
+      {/* Banner interactivo táctico al detectar oscuridad extrema */}
+      {showDarknessPrompt && !isTorchOn && (
+        <div
+          onClick={e => {
+            e.stopPropagation()
+            handleToggleTorch(true)
+          }}
+          className="absolute inset-x-3 sm:inset-x-8 top-1/2 -translate-y-1/2 p-4 rounded-2xl bg-[#090814]/95 border-2 border-amber-400 text-amber-200 flex flex-col items-center justify-center gap-2.5 backdrop-blur-md shadow-[0_0_35px_rgba(245,158,11,0.7)] z-30 cursor-pointer animate-pulse active:scale-95 transition-transform select-none"
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="flex items-center gap-2 font-pixel text-xs sm:text-sm text-amber-300">
+            <Flashlight className="w-5 h-5 text-amber-400 animate-bounce" />
+            <span>OSCURIDAD EXTREMA DETECTADA</span>
+          </div>
+          <p className="text-center font-mono text-xs sm:text-sm text-gray-200 leading-snug">
+            La cámara no recibe luz. <b>Toca aquí o cualquier parte de la pantalla</b> para activar la linterna asistiva y escanear el suelo.
+          </p>
+          <button
+            type="button"
+            className="mt-1 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-pixel text-[9px] uppercase font-bold shadow-[0_0_15px_#f59e0b] flex items-center gap-1.5"
+          >
+            <Flashlight className="w-4 h-4" />
+            <span>ACTIVAR LUZ ASISTIVA</span>
+          </button>
         </div>
       )}
 
