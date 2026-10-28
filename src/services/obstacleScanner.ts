@@ -54,7 +54,8 @@ export function formatSpatialAnnouncement(
   entity: SceneEntityType,
   zone: 'CENTER' | 'LEFT' | 'RIGHT' | 'NONE',
   depth: SpatialDepth = 'CENTER',
-  secondaryContext?: string
+  secondaryContext?: string,
+  isOnFloor = false
 ): string {
   if (entity === 'NONE') return 'Suelo y entorno despejados'
 
@@ -82,7 +83,7 @@ export function formatSpatialAnnouncement(
       base = `Precaución: Cableado en el suelo ${posText}`
       break
     case 'OBJECT':
-      base = `Objeto o estructura ${posText}`
+      base = isOnFloor ? `Objeto en el suelo ${posText}` : `Objeto o estructura ${posText}`
       break
     case 'SIGN':
       base = `Letrero ${posText}`
@@ -250,11 +251,11 @@ export class ObstacleScanner {
 
       // Regla de Oro Anti-Confusión:
       // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
-      const isCable = !isHuman && floorProximity > 0.12 && frontalProximity < 0.06 && floorRate < 0.08
-      // 2. OBJETO / ESTRUCTURA: Mesas, muebles, sillas, puertas, o bultos en suelo
-      const isFrontalObject = !isHuman && (frontalProximity > 0.10 || (floorProximity > 0.15 && floorRate >= 0.08))
-      // 3. ELEMENTO NO DETERMINADO: Si hay peligro pero no clasifica inequívocamente
-      const isUnclear = hasHazard && !isHuman && !isCable && !isFrontalObject
+      const isCable = !isHuman && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.08
+      // 2. OBJETO EN EL SUELO O ESTRUCTURA FRONTAL: Cajas, muebles, sillas, puertas, zapatos o bultos en suelo
+      const isFrontalObject = !isHuman && !isCable && (hasHazard || frontalProximity > 0.08 || floorProximity > 0.10)
+      // 3. ELEMENTO NO DETERMINADO
+      const isUnclear = false
 
       const leftScore = leftFloorEdges + leftFrontalEdges
       const centerScore = (centerFloorEdges + centerFrontalEdges) * 1.25
@@ -345,7 +346,8 @@ export class ObstacleScanner {
         }
       }
 
-      const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext)
+      const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
+      const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext, isOnFloor)
 
       // Regla de Oro Asistiva: Una persona NO es un obstáculo
       const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
@@ -524,11 +526,11 @@ export class ObstacleScanner {
 
     // Regla de Oro Anti-Confusión:
     // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
-    const isCable = !isHuman && floorProximity > 0.12 && frontalProximity < 0.06 && floorRate < 0.08
-    // 2. OBJETO / ESTRUCTURA: Mesas, muebles, sillas, puertas, o bultos en suelo
-    const isFrontalObject = !isHuman && (frontalProximity > 0.10 || (floorProximity > 0.15 && floorRate >= 0.08))
-    // 3. ELEMENTO NO DETERMINADO: Si hay peligro pero no clasifica inequívocamente
-    const isUnclear = hasHazard && !isHuman && !isCable && !isFrontalObject
+    const isCable = !isHuman && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.08
+    // 2. OBJETO EN EL SUELO O ESTRUCTURA FRONTAL: Cajas, muebles, sillas, puertas, zapatos o bultos en suelo
+    const isFrontalObject = !isHuman && !isCable && (hasHazard || frontalProximity > 0.08 || floorProximity > 0.10)
+    // 3. ELEMENTO NO DETERMINADO
+    const isUnclear = false
 
     let hazardZone: 'NONE' | 'LEFT' | 'CENTER' | 'RIGHT' = 'NONE'
     let secondaryContext: string | undefined = undefined
@@ -611,7 +613,8 @@ export class ObstacleScanner {
       }
     }
 
-    const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext)
+    const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
+    const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext, isOnFloor)
 
     // Regla de Oro Asistiva: Una persona NO es un obstáculo
     const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard

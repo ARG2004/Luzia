@@ -56,7 +56,7 @@ export const ObstacleRadarDisplay: React.FC<ObstacleRadarDisplayProps> = ({
         ) : analysis.entityType === 'OBJECT' ? (
           <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-500 text-black font-mono text-xs font-black animate-pulse shadow-[0_0_12px_rgba(249,115,22,0.7)]">
             <AlertTriangle className="w-3.5 h-3.5" />
-            OBJETO / ESTRUCTURA
+            {analysis.floorDensity >= analysis.frontalDensity ? 'OBJETO EN EL SUELO' : 'OBJETO / ESTRUCTURA'}
           </span>
         ) : analysis.entityType === 'UNCLEAR' || analysis.hasHazard ? (
           <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-yellow-400 text-black font-mono text-xs font-black animate-pulse shadow-[0_0_12px_rgba(250,204,21,0.7)]">
