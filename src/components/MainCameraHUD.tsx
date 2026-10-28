@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { Camera, Video, AlertCircle, Flashlight, FlashlightOff, ScanText, RefreshCw, CheckCircle2, SwitchCamera, Sparkles } from 'lucide-react'
+import { Camera, Video, AlertCircle, Flashlight, FlashlightOff, ScanText, RefreshCw, CheckCircle2, SwitchCamera, Sparkles, Compass } from 'lucide-react'
 import { StrobeDetector, type StrobeStatus } from '../services/strobeDetector'
 import { ObstacleScanner, type ObstacleAnalysisResult, type VisualFilterMode } from '../services/obstacleScanner'
+import { LightLocalizationService, type LightLocalizationResult, type LightZoneType } from '../services/lightLocalizationService'
 import { HapticsService } from '../services/hapticsService'
 import { AudioFeedbackService } from '../services/audioFeedbackService'
 import { OcrService, type OcrResult } from '../services/ocrService'
@@ -12,6 +13,7 @@ interface MainCameraHUDProps {
   onStrobeUpdate: (status: StrobeStatus) => void
   onObstacleUpdate: (analysis: ObstacleAnalysisResult) => void
   onFpsUpdate: (fps: number) => void
+  onLightLocalizationUpdate?: (result: LightLocalizationResult) => void
   externalSignToProcess?: string | null
   onSignProcessed?: (result: OcrResult) => void
   registerOcrTrigger: (fn: () => Promise<OcrResult | null>) => void
@@ -22,6 +24,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   onStrobeUpdate,
   onObstacleUpdate,
   onFpsUpdate,
+  onLightLocalizationUpdate,
   externalSignToProcess,
   onSignProcessed,
   registerOcrTrigger,
@@ -54,6 +57,16 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   useEffect(() => {
     onSignProcessedRef.current = onSignProcessed
   }, [onSignProcessed])
+
+  const [currentLightResult, setCurrentLightResult] = useState<LightLocalizationResult | null>(null)
+  const onLightLocalizationUpdateRef = useRef(onLightLocalizationUpdate)
+  useEffect(() => {
+    onLightLocalizationUpdateRef.current = onLightLocalizationUpdate
+  }, [onLightLocalizationUpdate])
+
+  const lastLightZoneRef = useRef<LightZoneType>('UNKNOWN')
+  const lastLightAnnouncedTimeRef = useRef<number>(0)
+  const lastLightUpdateTimeRef = useRef<number>(0)
 
   // Animación del feed simulado cuando no hay cámara web física disponible
   const simFrameRef = useRef<number>(0)
@@ -467,7 +480,15 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
             )
           }
 
-          // 4. Piloto Asistivo Autónomo para Personas Ciegas (Detección manos libres sin enloquecer)
+          // 4. Localización y Posicionamiento Espacial por Luz (VLP)
+          const lightLocResult = LightLocalizationService.processFrame(sCtx, w, h, facingMode)
+          if (now - lastLightUpdateTimeRef.current >= 120) {
+            setCurrentLightResult(lightLocResult)
+            onLightLocalizationUpdateRef.current?.(lightLocResult)
+            lastLightUpdateTimeRef.current = now
+          }
+
+          // 5. Piloto Asistivo Autónomo para Personas Ciegas (Detección manos libres sin enloquecer)
           if (isAutoPilotActiveRef.current && !OcrService.isWorking() && !strobeStatus.isDangerous) {
             const timeSinceLastAuto = now - lastAutoScanTimeRef.current
             // Cadencia asistiva equilibrada: cada 1900 ms
@@ -529,6 +550,14 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
                     // Si no hay texto claro legible, anunciar la orientación física real (cableado u objeto)
                     if (currentEntity !== 'NONE') {
                       speechToAnnounce = obstacleAnalysis.detectedDetails
+                    } else if (
+                      lightLocResult.zone !== 'UNKNOWN' &&
+                      lightLocResult.confidence >= 75 &&
+                      (lightLocResult.zone !== lastLightZoneRef.current || now - lastLightAnnouncedTimeRef.current > 24000)
+                    ) {
+                      speechToAnnounce = lightLocResult.guidanceMessage
+                      lastLightZoneRef.current = lightLocResult.zone
+                      lastLightAnnouncedTimeRef.current = now
                     }
                   }
                   emitAutopilotSpeech(speechToAnnounce)
@@ -610,6 +639,12 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
               <div className="text-[9px] font-mono bg-amber-950/90 text-yellow-300 border border-amber-500/80 px-2 py-0.5 rounded flex items-center gap-1 shadow-[0_0_15px_#f59e0b] animate-pulse">
                 <AlertCircle className="w-3 h-3 text-amber-400" />
                 <span>{isTorchOn ? 'OSCURIDAD SEVERA · LINTERNA LED ACTIVA' : 'PENUMBRA EXTREMA · GANANCIA NOCTURNA DIGITAL'}</span>
+              </div>
+            )}
+            {currentLightResult && currentLightResult.zone !== 'UNKNOWN' && (
+              <div className="text-[9px] font-mono bg-cyan-950/90 text-cyan-200 border border-cyan-400/50 px-2 py-0.5 rounded flex items-center gap-1 shadow-[0_0_10px_rgba(0,240,255,0.3)]">
+                <Compass className="w-2.5 h-2.5 text-cyan-400" />
+                <span>VLP: {currentLightResult.locationName} ({currentLightResult.confidence}%)</span>
               </div>
             )}
           </div>

@@ -10,13 +10,14 @@ import {
   HeartPulse,
   Flame,
   FileCheck2,
+  Compass,
 } from 'lucide-react'
 import { HapticsService } from '../services/hapticsService'
 
 export interface TelemetryEvent {
   id: string
   timestamp: string
-  type: 'STROBE' | 'OBSTACLE' | 'OCR' | 'SOS'
+  type: 'STROBE' | 'OBSTACLE' | 'OCR' | 'SOS' | 'LIGHT'
   severity: 'INFO' | 'WARNING' | 'CRITICAL'
   title: string
   details: string
@@ -410,6 +411,7 @@ DISPOSITIVO AUTÓNOMO ON-DEVICE · SIN EXFILTRACIÓN DE DATOS
                     {event.type === 'OBSTACLE' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
                     {event.type === 'OCR' && <FileCheck2 className="w-4 h-4 text-emerald-400" />}
                     {event.type === 'SOS' && <HeartPulse className="w-4 h-4 text-red-400 animate-pulse" />}
+                    {event.type === 'LIGHT' && <Compass className="w-4 h-4 text-cyan-400" />}
                   </div>
 
                   <div>

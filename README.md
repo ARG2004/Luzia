@@ -22,17 +22,17 @@ En atracciones nocturnas, conciertos, eventos culturales y casas del terror, con
 
 ---
 
-## 📸 Los 3 Pilares Técnicos de Luzía
+## 📸 Los 4 Pilares Técnicos de Luzía
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      L U Z Í A   (H U D)                        │
-├───────────────────┬─────────────────────────┬───────────────────┤
-│ 1. ESTROBOS       │ 2. OBSTÁCULOS           │ 3. SEÑALÉTICA OCR │
-│ • Frecuencia (Hz) │ • Convolución Sobel     │ • Tesseract Local │
-│ • Alerta 3-30 Hz  │ • Radar Neón Suelo      │ • Síntesis TTS    │
-│ • Tono + Háptico  │ • Sónar por Proximidad  │ • Voz de Auxilio  │
-└───────────────────┴─────────────────────────┴───────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           L U Z Í A   (H U D)                                   │
+├─────────────────┬─────────────────┬───────────────────┬─────────────────────────┤
+│ 1. ESTROBOS     │ 2. OBSTÁCULOS   │ 3. SEÑALÉTICA OCR │ 4. LOCALIZACIÓN POR LUZ │
+│ • Frecuencia Hz │ • Kernel Sobel  │ • Tesseract Local │ • Posicionamiento VLP   │
+│ • Alerta 3-30Hz │ • Radar Suelo   │ • Síntesis TTS    │ • Brújula Fotométrica   │
+│ • Tono + Háptico│ • Sónar Neón    │ • Voz de Auxilio  │ • Cero Falsos Positivos │
+└─────────────────┴─────────────────┴───────────────────┴─────────────────────────┘
 ```
 
 ### 1. ⚡ Detector Estroboscópico de Fotosensibilidad
@@ -41,7 +41,7 @@ En atracciones nocturnas, conciertos, eventos culturales y casas del terror, con
 * **Respuesta Inmediata:** Alerta visual carmesí, vibración mecánica háptica severa y tono oscilante para que el usuario aparte la vista antes de una crisis.
 
 ### 2. 👣 Escáner de Obstáculos por Alto Contraste
-* **Kernel de Convolución Sobel:** Análisis espacial enfocado en el tercio inferior del campo visual (suelo).
+* **Kernel de Convolución Sobel:** Análisis espacial enfocado en el campo visual del suelo y frontal.
 * **Modos de Filtro Visual:**
   * **Bordes Neón:** Resalta cables y escalones en verde fosforescente y rojo sobre fondo negro azabache (WCAG AAA).
   * **Visión Nocturna:** Realce de gamma para baja iluminación.
@@ -52,6 +52,11 @@ En atracciones nocturnas, conciertos, eventos culturales y casas del terror, con
 * **On-Device OCR:** Reconocimiento de texto local sin conexión a internet mediante Tesseract.js.
 * **Binarización Adaptativa:** Mejora de contraste de letreros reflectantes en penumbra.
 * **Síntesis de Voz Asistiva:** Locución automática en español para rutas de escape (`"Salida de emergencia localizada al frente"`, `"Ruta de evacuación"`, `"Peligro"`).
+
+### 4. 🧭 Localización Espacial en Interiores por Luz (VLP - Visible Light Positioning)
+* **Fotometría en 5 Cuadrantes:** Muestreo de luminancia en tiempo real (Cenital/Techo, Frontal/Centro, Izquierda, Derecha y Suelo) para estimar lux relativos y vector director hacia la fuente de luz.
+* **Detección de Ubicación y Balizas Ópticas:** Informa por voz asistiva dónde está el usuario con porcentaje de certeza exacto (`"Estás en Salón Iluminado"`, `"Estás en el Stand de Electriciencia"`, `"Estás frente a la Salida Iluminada"`).
+* **Filtro Anti Falsos Positivos:** Consenso temporal de 12 fotogramas continuos y calibración diferenciada para Web (Webcam frontal) y Móvil (Cámara trasera).
 
 ---
 

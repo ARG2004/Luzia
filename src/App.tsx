@@ -10,6 +10,7 @@ import {
   Gamepad2,
   Video,
   FileSpreadsheet,
+  Compass,
 } from 'lucide-react'
 import { HeaderTactical } from './components/HeaderTactical'
 import { MainCameraHUD } from './components/MainCameraHUD'
@@ -17,17 +18,19 @@ import { FnafStageMinigame } from './components/FnafStageMinigame'
 import { StrobeRadarDisplay } from './components/StrobeRadarDisplay'
 import { ObstacleRadarDisplay } from './components/ObstacleRadarDisplay'
 import { OcrSignReaderDisplay } from './components/OcrSignReaderDisplay'
+import { LightLocalizationDisplay } from './components/LightLocalizationDisplay'
 import { VenueAuditComplianceDisplay, type TelemetryEvent } from './components/VenueAuditComplianceDisplay'
 import { HorrorSimulatorModal } from './components/HorrorSimulatorModal'
 import { AccessibilitySettingsDrawer } from './components/AccessibilitySettingsDrawer'
 import type { StrobeStatus } from './services/strobeDetector'
 import type { ObstacleAnalysisResult, VisualFilterMode } from './services/obstacleScanner'
+import { LightLocalizationService, type LightLocalizationResult, type LightZoneType } from './services/lightLocalizationService'
 import { OcrService, type OcrResult } from './services/ocrService'
 import { TtsService } from './services/ttsService'
 import { AudioFeedbackService } from './services/audioFeedbackService'
 import { HapticsService } from './services/hapticsService'
 
-type ActiveTab = 'HUD' | 'STROBE' | 'OCR' | 'AUDIT' | 'DOCS'
+type ActiveTab = 'HUD' | 'STROBE' | 'OCR' | 'LIGHT' | 'AUDIT' | 'DOCS'
 
 export const App: React.FC = () => {
   // Navigation & Tabs
@@ -57,6 +60,16 @@ export const App: React.FC = () => {
     frontalDensity: 0,
     entityType: 'NONE',
     detectedDetails: 'Suelo y entorno despejados',
+  })
+  const [lightLocalization, setLightLocalization] = useState<LightLocalizationResult>({
+    zone: 'UNKNOWN',
+    locationName: 'Calibrando sensor de luz...',
+    guidanceMessage: 'Iniciando escaneo fotométrico...',
+    confidence: 0,
+    lightDirection: 'NONE',
+    estimatedLux: 0,
+    hasOpticalBeacon: false,
+    quadrantLuminance: { overhead: 0, center: 0, left: 0, right: 0, floor: 0 },
   })
 
   // Modals & Panels
@@ -157,6 +170,39 @@ export const App: React.FC = () => {
       }
     }
   }, [obstacleAnalysis.hasHazard, obstacleAnalysis.hazardZone, obstacleAnalysis.proximityIndex, addTelemetryEvent])
+
+  // Monitoreo de localización fotométrica por luz para telemetría
+  const lastLoggedLightZoneRef = useRef<string>('UNKNOWN')
+  useEffect(() => {
+    if (lightLocalization.zone !== 'UNKNOWN' && lightLocalization.confidence >= 75) {
+      if (lightLocalization.zone !== lastLoggedLightZoneRef.current) {
+        addTelemetryEvent({
+          type: 'LIGHT',
+          severity: 'INFO',
+          title: `Ubicación VLP: ${lightLocalization.locationName}`,
+          details: `${lightLocalization.guidanceMessage} (Lux: ${lightLocalization.estimatedLux}, Vector: ${lightLocalization.lightDirection}).`,
+        })
+        lastLoggedLightZoneRef.current = lightLocalization.zone
+      }
+    }
+  }, [lightLocalization.zone, lightLocalization.confidence, lightLocalization.locationName, lightLocalization.guidanceMessage, lightLocalization.estimatedLux, lightLocalization.lightDirection, addTelemetryEvent])
+
+  // Simulación de Baliza Óptica VLP
+  const handleSimulateLightBeacon = (zone: LightZoneType | null) => {
+    LightLocalizationService.setSimulatedBeacon(zone)
+    if (zone) {
+      AudioFeedbackService.playSuccessChime()
+      HapticsService.signDetected()
+      const dummyCtx = document.createElement('canvas').getContext('2d')
+      if (dummyCtx) {
+        const res = LightLocalizationService.processFrame(dummyCtx, 64, 48)
+        setLightLocalization(res)
+        TtsService.speak(res.guidanceMessage, true)
+      }
+    } else {
+      TtsService.speak('Sensor fotométrico en vivo restablecido.', true)
+    }
+  }
 
   // Toggle Panic SOS
   const handleTogglePanic = () => {
@@ -367,6 +413,7 @@ export const App: React.FC = () => {
                 onStrobeUpdate={setStrobeStatus}
                 onObstacleUpdate={setObstacleAnalysis}
                 onFpsUpdate={setFps}
+                onLightLocalizationUpdate={setLightLocalization}
                 externalSignToProcess={simulatedSignText}
                 onSignProcessed={handleSignProcessed}
                 registerOcrTrigger={handleRegisterOcrTrigger}
@@ -383,6 +430,21 @@ export const App: React.FC = () => {
               analysis={obstacleAnalysis}
               currentFilter={filterMode}
               onSelectFilter={setFilterMode}
+            />
+            <div className="md:col-span-2">
+              <LightLocalizationDisplay
+                result={lightLocalization}
+                onSimulateBeacon={handleSimulateLightBeacon}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'LIGHT' && (
+          <div className="space-y-4">
+            <LightLocalizationDisplay
+              result={lightLocalization}
+              onSimulateBeacon={handleSimulateLightBeacon}
             />
           </div>
         )}
@@ -602,6 +664,22 @@ export const App: React.FC = () => {
         >
           <ScanText className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">SEÑALES</span>
+        </button>
+
+        <button
+          onClick={() => {
+            HapticsService.tap()
+            setActiveTab('LIGHT')
+          }}
+          className={`flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all ${
+            activeTab === 'LIGHT'
+              ? 'text-cyan-300 font-bold scale-105'
+              : 'text-gray-400 hover:text-white'
+          }`}
+          title="Localización fotométrica y brújula de luz"
+        >
+          <Compass className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="text-[6.5px] xs:text-[7.5px] sm:text-[8px] truncate max-w-full">LUZ (VLP)</span>
         </button>
 
         <button
