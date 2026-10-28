@@ -22,7 +22,7 @@ import { HorrorSimulatorModal } from './components/HorrorSimulatorModal'
 import { AccessibilitySettingsDrawer } from './components/AccessibilitySettingsDrawer'
 import type { StrobeStatus } from './services/strobeDetector'
 import type { ObstacleAnalysisResult, VisualFilterMode } from './services/obstacleScanner'
-import type { OcrResult } from './services/ocrService'
+import { OcrService, type OcrResult } from './services/ocrService'
 import { TtsService } from './services/ttsService'
 import { AudioFeedbackService } from './services/audioFeedbackService'
 import { HapticsService } from './services/hapticsService'
@@ -51,6 +51,12 @@ export const App: React.FC = () => {
     proximityIndex: 0,
     hasHazard: false,
     hazardZone: 'NONE',
+    spatialDepth: 'CENTER',
+    hazardType: 'NONE',
+    floorDensity: 0,
+    frontalDensity: 0,
+    entityType: 'NONE',
+    detectedDetails: 'Suelo y entorno despejados',
   })
 
   // Modals & Panels
@@ -72,10 +78,11 @@ export const App: React.FC = () => {
 
   const triggerOcrRef = useRef<(() => Promise<OcrResult | null>) | null>(null)
 
-  // Init TTS on mount
+  // Init TTS & prewarm OCR on mount
   useEffect(() => {
     TtsService.init()
     HapticsService.checkAvailability()
+    OcrService.initWorker()
     const timer = setTimeout(() => {
       TtsService.speak('Luzía activada. Visor asistivo en tiempo real.')
     }, 1000)
@@ -102,6 +109,7 @@ export const App: React.FC = () => {
     const nextMuted = !isMuted
     setIsMuted(nextMuted)
     AudioFeedbackService.setMuted(nextMuted)
+    TtsService.setEnabled(!nextMuted && isTtsEnabled)
     if (nextMuted) {
       TtsService.stop()
     }
@@ -182,6 +190,10 @@ export const App: React.FC = () => {
 
   // Execute OCR scan from UI button
   const handleTriggerOcr = async (): Promise<OcrResult | null> => {
+    if (use8BitMinigameView) {
+      setUse8BitMinigameView(false)
+      await new Promise(resolve => setTimeout(resolve, 350))
+    }
     if (!triggerOcrRef.current) return null
     setIsOcrScanning(true)
     try {
@@ -200,9 +212,16 @@ export const App: React.FC = () => {
     triggerOcrRef.current = fn
   }, [])
 
-  // Inject Simulated Sign
+  // Procesar señal simulada dinámicamente sin datos hardcodeados
   const handleInjectSimulatedSign = (text: string) => {
     setSimulatedSignText(text)
+    const result = OcrService.formatResult(text, 98)
+    if (result) {
+      handleSignProcessed(result)
+      AudioFeedbackService.playSuccessChime()
+      HapticsService.signDetected()
+      TtsService.speak(result.guidanceMessage || `Texto detectado: ${result.text}`, true)
+    }
     setTimeout(() => {
       setSimulatedSignText(null)
     }, 2000)
@@ -653,7 +672,13 @@ export const App: React.FC = () => {
           })
         }}
         isTtsEnabled={isTtsEnabled}
-        onToggleTts={() => setIsTtsEnabled(prev => !prev)}
+        onToggleTts={() => {
+          setIsTtsEnabled(prev => {
+            const next = !prev
+            TtsService.setEnabled(next && !isMuted)
+            return next
+          })
+        }}
         highSensitivityStrobe={highSensitivityStrobe}
         onToggleStrobeSensitivity={() => setHighSensitivityStrobe(prev => !prev)}
         isAccessibleFont={isAccessibleFont}

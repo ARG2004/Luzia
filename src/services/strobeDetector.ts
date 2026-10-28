@@ -8,15 +8,17 @@ export interface StrobeStatus {
 }
 
 export class StrobeDetector {
+  private static offscreenCanvas: HTMLCanvasElement | null = null
+  private static offscreenCtx: CanvasRenderingContext2D | null = null
   private static luminanceHistory: { time: number; lum: number }[] = []
   private static readonly MAX_HISTORY_MS = 2000 // Ventana de 2 segundos
   private static readonly MIN_FREQ = 3.0 // 3 Hz límite inferior fotosensible
   private static readonly MAX_FREQ = 30.0 // 30 Hz límite superior fotosensible
-  private static readonly MIN_DELTA_LUM = 22 // Umbral mínimo de variación brusca (0-255)
+  private static readonly MIN_DELTA_LUM = 14 // Umbral calibrado para pantallas, monitores y lámparas estroboscópicas
 
   /**
-   * Procesa un fotograma extrayendo la luminancia media Y = 0.299R + 0.587G + 0.114B
-   * Utiliza una cuadrícula de muestreo rápida (step de 4 u 8 píxeles) para 60 FPS sin lag
+   * Procesa un fotograma completo reescalando el canvas a una resolución rápida (64x48)
+   * Captura destellos en cualquier parte del campo visual (centro, periferia o pantalla completa).
    */
   public static analyzeFrame(
     ctx: CanvasRenderingContext2D,
@@ -24,12 +26,40 @@ export class StrobeDetector {
     height: number,
     nowMs: number = performance.now()
   ): StrobeStatus {
-    const sampleWidth = Math.min(width, 160)
-    const sampleHeight = Math.min(height, 120)
+    if (!ctx || !ctx.canvas || width <= 0 || height <= 0) {
+      return {
+        isDangerous: false,
+        frequencyHz: 0,
+        currentLuminance: 0,
+        deltaLuminance: 0,
+        history: [],
+        riskLevel: 'SAFE',
+      }
+    }
+
+    if (!this.offscreenCanvas) {
+      this.offscreenCanvas = document.createElement('canvas')
+      this.offscreenCanvas.width = 64
+      this.offscreenCanvas.height = 48
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true })
+    }
+
+    if (!this.offscreenCtx) {
+      return {
+        isDangerous: false,
+        frequencyHz: 0,
+        currentLuminance: 0,
+        deltaLuminance: 0,
+        history: [],
+        riskLevel: 'SAFE',
+      }
+    }
 
     let imgData: ImageData
     try {
-      imgData = ctx.getImageData(0, 0, sampleWidth, sampleHeight)
+      // Reescalar todo el fotograma al offscreen canvas para muestreo global de 3072 píxeles
+      this.offscreenCtx.drawImage(ctx.canvas, 0, 0, 64, 48)
+      imgData = this.offscreenCtx.getImageData(0, 0, 64, 48)
     } catch {
       return {
         isDangerous: false,
@@ -45,8 +75,7 @@ export class StrobeDetector {
     let totalLum = 0
     let count = 0
 
-    // Muestreo con salto de 4 píxeles para velocidad instantánea
-    for (let i = 0; i < data.length; i += 16) {
+    for (let i = 0; i < data.length; i += 4) {
       const r = data[i]
       const g = data[i + 1]
       const b = data[i + 2]
@@ -93,21 +122,24 @@ export class StrobeDetector {
     const avgLum = sumLum / this.luminanceHistory.length
     const deltaLum = maxLum - minLum
 
-    // Conteo de cruces ascendentes por la media
+    // Conteo de cruces por la media con histéresis anti-ruido (evita falsos positivos por ruido del sensor)
+    const noiseMargin = Math.max(1.8, deltaLum * 0.12)
     let zeroCrossings = 0
-    let prevVal = this.luminanceHistory[0].lum - avgLum
+    let state: 'BELOW' | 'ABOVE' = this.luminanceHistory[0].lum > avgLum ? 'ABOVE' : 'BELOW'
 
     for (let i = 1; i < this.luminanceHistory.length; i++) {
-      const curVal = this.luminanceHistory[i].lum - avgLum
-      if (prevVal <= 0 && curVal > 0) {
+      const val = this.luminanceHistory[i].lum
+      if (state === 'BELOW' && val > avgLum + noiseMargin) {
         zeroCrossings++
+        state = 'ABOVE'
+      } else if (state === 'ABOVE' && val < avgLum - noiseMargin) {
+        state = 'BELOW'
       }
-      prevVal = curVal
     }
 
     // Duración de la ventana de muestras en segundos
     const durationSec = (this.luminanceHistory[this.luminanceHistory.length - 1].time - this.luminanceHistory[0].time) / 1000
-    const calculatedFreq = durationSec > 0.3 ? zeroCrossings / durationSec : 0
+    const calculatedFreq = durationSec > 0.25 ? zeroCrossings / durationSec : 0
 
     // Evaluar si cae en la zona de riesgo fotosensible (3 a 30 Hz) con amplitud relevante
     const isDangerous =
@@ -117,9 +149,9 @@ export class StrobeDetector {
 
     let riskLevel: 'SAFE' | 'LOW' | 'HIGH' | 'CRITICAL' = 'SAFE'
     if (isDangerous) {
-      if (calculatedFreq >= 10 && calculatedFreq <= 20 && deltaLum > 45) {
+      if (calculatedFreq >= 10 && calculatedFreq <= 20 && deltaLum > 40) {
         riskLevel = 'CRITICAL' // La zona de mayor riesgo neurológico fotosensible (12-18 Hz)
-      } else if (deltaLum > 35) {
+      } else if (deltaLum > 25) {
         riskLevel = 'HIGH'
       } else {
         riskLevel = 'LOW'

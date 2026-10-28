@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { Camera, Video, AlertCircle, Flashlight, FlashlightOff, ScanText, RefreshCw, CheckCircle2, SwitchCamera } from 'lucide-react'
+import { Camera, Video, AlertCircle, Flashlight, FlashlightOff, ScanText, RefreshCw, CheckCircle2, SwitchCamera, Sparkles } from 'lucide-react'
 import { StrobeDetector, type StrobeStatus } from '../services/strobeDetector'
 import { ObstacleScanner, type ObstacleAnalysisResult, type VisualFilterMode } from '../services/obstacleScanner'
 import { HapticsService } from '../services/hapticsService'
@@ -39,12 +39,28 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   const [showDarknessPrompt, setShowDarknessPrompt] = useState(false)
   const [isOcrProcessing, setIsOcrProcessing] = useState(false)
   const [quickOcrFeedback, setQuickOcrFeedback] = useState<string | null>(null)
+  const [isAutoPilotActive, setIsAutoPilotActive] = useState<boolean>(true)
+
+  const isAutoPilotActiveRef = useRef<boolean>(true)
+  useEffect(() => {
+    isAutoPilotActiveRef.current = isAutoPilotActive
+  }, [isAutoPilotActive])
+
+  const lastAutoScanTimeRef = useRef<number>(0)
+  const lastAnnouncedTextRef = useRef<string>('')
+  const lastAnnouncedTimeRef = useRef<number>(0)
+
+  const onSignProcessedRef = useRef(onSignProcessed)
+  useEffect(() => {
+    onSignProcessedRef.current = onSignProcessed
+  }, [onSignProcessed])
 
   // Animación del feed simulado cuando no hay cámara web física disponible
   const simFrameRef = useRef<number>(0)
   const lastDangerSoundTimeRef = useRef<number>(0)
   const lastTapTimeRef = useRef<number>(0)
   const lastDarknessVoiceAlertRef = useRef<number>(0)
+  const lastStrobeVoiceTimeRef = useRef<number>(0)
 
   // Iniciar Stream de Cámara con soporte para Cámara Trasera o Frontal
   const startCamera = useCallback(async (targetFacing: 'environment' | 'user' = 'environment') => {
@@ -85,7 +101,38 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
         await videoEl.play()
         setHasCameraPermission(true)
         setIsUsingSimulatedFeed(false)
-        setFacingMode(targetFacing)
+
+        // Detección inteligente de cámara frontal (PC Webcam / Laptop) vs trasera (Teléfonos):
+        const track = stream.getVideoTracks()[0]
+        const settings = track?.getSettings ? track.getSettings() : {}
+        let detectedFacing: 'environment' | 'user' = targetFacing
+
+        if (settings.facingMode) {
+          detectedFacing = settings.facingMode as 'environment' | 'user'
+        } else {
+          const label = (track?.label || '').toLowerCase()
+          if (
+            label.includes('front') ||
+            label.includes('user') ||
+            label.includes('webcam') ||
+            label.includes('integrated') ||
+            label.includes('face') ||
+            label.includes('facetime')
+          ) {
+            detectedFacing = 'user'
+          } else if (
+            label.includes('back') ||
+            label.includes('rear') ||
+            label.includes('environment')
+          ) {
+            detectedFacing = 'environment'
+          } else {
+            // Si no hay etiqueta explícita (ej. Chrome en PC), detectar si es móvil o computadora
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+            detectedFacing = isMobile ? targetFacing : 'user'
+          }
+        }
+        setFacingMode(detectedFacing)
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'No se pudo acceder a la cámara.'
@@ -108,6 +155,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
   }, [facingMode, startCamera])
 
   useEffect(() => {
+    OcrService.initWorker()
     const videoEl = videoRef.current
     const run = async () => {
       await startCamera('environment')
@@ -122,22 +170,13 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     }
   }, [startCamera])
 
-  // Inyectar letrero simulado si viene de fuera
+  // Procesar letrero dinámicamente si viene del simulador
   useEffect(() => {
     if (externalSignToProcess) {
-      const mockResult: OcrResult = {
-        text: externalSignToProcess,
-        confidence: 96,
-        guidanceMessage:
-          externalSignToProcess.includes('SALIDA')
-            ? 'Salida localizada al frente. Continúe con precaución.'
-            : externalSignToProcess.includes('EVACUACIÓN')
-            ? 'Ruta de evacuación identificada.'
-            : externalSignToProcess.includes('PELIGRO')
-            ? '¡Atención! Zona de peligro por instalaciones eléctricas.'
-            : `Letrero detectado: ${externalSignToProcess}`,
+      const res = OcrService.formatResult(externalSignToProcess, 96)
+      if (res) {
+        onSignProcessed?.(res)
       }
-      onSignProcessed?.(mockResult)
     }
   }, [externalSignToProcess, onSignProcessed])
 
@@ -224,9 +263,16 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     try {
       const result = await triggerOcrScan()
       if (result && result.text) {
-        onSignProcessed?.(result)
-        AudioFeedbackService.playSuccessChime()
-        setQuickOcrFeedback(`"${result.text}"`)
+        if (result.isUnclear) {
+          setQuickOcrFeedback('Texto no claro')
+          TtsService.speak(result.guidanceMessage || 'Texto no claro. Acerque la cámara o active la linterna.', true)
+        } else {
+          onSignProcessed?.(result)
+          AudioFeedbackService.playSuccessChime()
+          HapticsService.signDetected()
+          TtsService.speak(result.guidanceMessage || `Texto detectado: ${result.text}`, true)
+          setQuickOcrFeedback(`"${result.text}"`)
+        }
         setTimeout(() => setQuickOcrFeedback(null), 4000)
       } else {
         setQuickOcrFeedback('Sin texto legible')
@@ -239,6 +285,21 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
     } finally {
       setIsOcrProcessing(false)
     }
+  }
+
+  // Alternar Piloto Autónomo Manos Libres para Personas Ciegas
+  const handleToggleAutoPilot = () => {
+    HapticsService.tap()
+    setIsAutoPilotActive(prev => {
+      const next = !prev
+      TtsService.speak(
+        next
+          ? 'Piloto automático para invidentes activado. Manos libres en curso.'
+          : 'Piloto automático desactivado. Modo manual.',
+        true
+      )
+      return next
+    })
   }
 
   // Doble toque en el visor para disparar lectura OCR rápida o toque para encender linterna en oscuridad
@@ -357,10 +418,19 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
               AudioFeedbackService.playStrobeAlarm()
               lastDangerSoundTimeRef.current = now
             }
+
+            // Alerta vocal prioritaria para usuarios con fotosensibilidad
+            if (now - lastStrobeVoiceTimeRef.current > 3800) {
+              const freqText = Math.max(3, Math.round(strobeStatus.frequencyHz))
+              const msg = `¡Alerta de fotosensibilidad! Luz intermitente a ${freqText} hercios. Desvíe la mirada.`
+              TtsService.speak(msg, true)
+              setQuickOcrFeedback(msg)
+              lastStrobeVoiceTimeRef.current = now
+            }
           }
 
-          // 2. Procesamiento de Bordes de Alto Contraste y Escáner de Suelo
-          const obstacleAnalysis = ObstacleScanner.processFrame(sCtx, dCtx, w, h, filterMode, 34)
+          // 2. Procesamiento de Bordes de Alto Contraste y Escáner de Suelo y Objetos
+          const obstacleAnalysis = ObstacleScanner.processFrame(sCtx, dCtx, w, h, filterMode, 22, facingMode)
           if (
             obstacleAnalysis.hasHazard !== lastHazardStateRef.current ||
             now - lastObstacleUpdateTimeRef.current >= 120
@@ -395,6 +465,80 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
               obstacleAnalysis.proximityIndex,
               obstacleAnalysis.hazardZone
             )
+          }
+
+          // 4. Piloto Asistivo Autónomo para Personas Ciegas (Detección manos libres sin enloquecer)
+          if (isAutoPilotActiveRef.current && !OcrService.isWorking() && !strobeStatus.isDangerous) {
+            const timeSinceLastAuto = now - lastAutoScanTimeRef.current
+            // Cadencia asistiva equilibrada: cada 1900 ms
+            if (timeSinceLastAuto >= 1900) {
+              lastAutoScanTimeRef.current = now
+
+              let scanCanvas: HTMLCanvasElement | null = null
+              if (!isUsingSimulatedFeed && video && video.readyState >= 2 && video.videoWidth > 0) {
+                const hd = document.createElement('canvas')
+                hd.width = video.videoWidth
+                hd.height = video.videoHeight
+                const hdCtx = hd.getContext('2d', { willReadFrequently: true })
+                if (hdCtx) {
+                  hdCtx.drawImage(video, 0, 0, hd.width, hd.height)
+                  scanCanvas = hd
+                }
+              } else {
+                scanCanvas = sourceCanvas
+              }
+
+              if (scanCanvas) {
+                const currentEntity = obstacleAnalysis.entityType || 'NONE'
+                const isHumanDetected = currentEntity === 'HUMAN'
+
+                OcrService.recognizeText(scanCanvas, undefined, isHumanDetected).then(result => {
+                  let speechToAnnounce: string | null = null
+
+                  if (result && result.text && result.text.length >= 2) {
+                    if (result.isUnclear) {
+                      speechToAnnounce = result.guidanceMessage || (isHumanDetected ? 'Persona al frente. Texto no claro; acerque el gafete.' : 'Letrero al frente no claro.')
+                    } else if (result.confidence >= 55) {
+                      speechToAnnounce = result.guidanceMessage || `Texto: ${result.text}`
+                      onSignProcessedRef.current?.(result)
+                    } else {
+                      // Si la confianza del texto es baja, priorizar la orientación espacial física (humano, objeto o cableado)
+                      speechToAnnounce = currentEntity !== 'NONE' ? obstacleAnalysis.detectedDetails : null
+                    }
+                  } else {
+                    // Si no hay texto, anunciar la orientación espacial precisa (dirección y distancia real):
+                    if (currentEntity !== 'NONE') {
+                      speechToAnnounce = obstacleAnalysis.detectedDetails
+                    }
+                  }
+
+                  if (speechToAnnounce && speechToAnnounce !== 'Suelo y entorno despejados') {
+                    const nowMs = Date.now()
+                    const isSame = speechToAnnounce.toLowerCase().trim() === lastAnnouncedTextRef.current.toLowerCase().trim()
+                    const timeSince = nowMs - lastAnnouncedTimeRef.current
+
+                    // Regla de Oro "Sin Enloquecer", "Sin Alucinación" y Modo Exposición/Audiencia:
+                    // Una persona NO es un obstáculo: en ferias o exposiciones con público observando,
+                    // la presencia humana se anuncia de forma discreta sin interrumpir la presentación.
+                    const isHumanAnnouncement = speechToAnnounce.toLowerCase().includes('persona')
+                    const minInterval = isHumanAnnouncement ? 7000 : 4000
+                    const repeatCooldown = isHumanAnnouncement ? 18000 : 9500
+
+                    if (timeSince >= minInterval && (!isSame || timeSince > repeatCooldown)) {
+                      lastAnnouncedTextRef.current = speechToAnnounce
+                      lastAnnouncedTimeRef.current = nowMs
+                      if (!isHumanAnnouncement) {
+                        AudioFeedbackService.playSuccessChime()
+                        HapticsService.signDetected()
+                      }
+                      TtsService.speak(speechToAnnounce, true)
+                      setQuickOcrFeedback(`"${speechToAnnounce}"`)
+                      setTimeout(() => setQuickOcrFeedback(null), 3500)
+                    }
+                  }
+                }).catch(() => {})
+              }
+            }
           }
         }
       }
@@ -473,20 +617,28 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
           <div className="w-6 h-6 border-t-2 border-r-2 border-cyan-400" />
         </div>
 
-        {/* Zona Central: Retícula de Enfoque para Señalética */}
-        <div className="self-center relative flex items-center justify-center">
+        {/* Zona Central: Retícula Amplia de Enfoque para Señalética y Objetos */}
+        <div className="self-center relative flex items-center justify-center w-full max-w-sm px-2">
           <div
-            className={`w-36 h-22 sm:w-44 sm:h-28 border-2 border-dashed rounded-xl flex items-center justify-center transition-all ${
+            className={`w-full h-36 sm:h-44 border-2 border-dashed rounded-2xl flex flex-col items-center justify-between p-2 transition-all ${
               isOcrProcessing
-                ? 'border-cyan-300 bg-cyan-950/40 shadow-[0_0_20px_#00f0ff]'
-                : 'border-cyan-400/50 bg-black/30'
+                ? 'border-cyan-300 bg-cyan-950/50 shadow-[0_0_30px_#00f0ff]'
+                : 'border-cyan-400/40 bg-black/20'
             }`}
           >
-            <span className="text-[10px] font-mono font-bold text-cyan-200 uppercase tracking-wider text-center px-1">
-              {isOcrProcessing ? 'ANALIZANDO...' : 'ENFOCAR SEÑAL'}
+            <div className="w-full flex justify-between text-[8px] sm:text-[9px] font-mono text-cyan-300/80">
+              <span>┌ ÁREA DE TEXTO</span>
+              <span>GAFETES / OBJETOS ┐</span>
+            </div>
+            <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-200 uppercase tracking-wider text-center px-2 py-0.5 bg-black/60 rounded border border-cyan-500/30 backdrop-blur-sm">
+              {isOcrProcessing ? 'ANALIZANDO PALABRAS...' : 'COLOCAR TEXTO / GAFETE AQUÍ'}
             </span>
+            <div className="w-full flex justify-between text-[8px] sm:text-[9px] font-mono text-cyan-300/80">
+              <span>└ ESCANEO ACTIVO</span>
+              <span>LEER SEÑAL ┘</span>
+            </div>
           </div>
-          <div className="absolute w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+          <div className="absolute w-3 h-3 rounded-full bg-cyan-400 animate-ping pointer-events-none" />
         </div>
 
         {/* Zona Inferior: Retícula de Suelo y Obstáculos */}
@@ -557,21 +709,39 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
         </button>
       </div>
 
-      {/* Botón Flotante Superior Derecho: Escaneo Rápido de Señales */}
+      {/* Botones Flotantes: Piloto Ciego Autónomo y Lectura Inmediata */}
       <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20">
+        <button
+          onClick={e => {
+            e.stopPropagation()
+            handleToggleAutoPilot()
+          }}
+          className={`text-[10px] sm:text-[11px] font-mono px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 backdrop-blur-md transition-all shadow-md active:scale-95 ${
+            isAutoPilotActive
+              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-400 shadow-[0_0_12px_rgba(0,255,102,0.4)]'
+              : 'bg-black/80 hover:bg-black text-gray-400 border-gray-600'
+          }`}
+          title="Piloto Asistivo Automático para Personas Ciegas (Manos Libres)"
+          aria-label={isAutoPilotActive ? 'Desactivar piloto automático' : 'Activar piloto automático para ciegos'}
+        >
+          <Sparkles className={`w-3.5 h-3.5 ${isAutoPilotActive ? 'text-emerald-400 animate-spin' : 'text-gray-400'}`} />
+          <span className="hidden sm:inline">PILOTO CIEGO:</span>
+          <span>{isAutoPilotActive ? 'AUTO ON' : 'MANUAL'}</span>
+        </button>
+
         <button
           onClick={e => {
             e.stopPropagation()
             handleQuickOcr()
           }}
           disabled={isOcrProcessing}
-          className={`text-[11px] font-mono px-3 py-1.5 rounded-lg border flex items-center gap-1.5 backdrop-blur-md transition-all shadow-lg active:scale-95 ${
+          className={`text-[10px] sm:text-[11px] font-mono px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 backdrop-blur-md transition-all shadow-lg active:scale-95 ${
             isOcrProcessing
               ? 'bg-cyan-600 text-white border-cyan-300 animate-pulse'
-              : 'bg-cyan-950/90 hover:bg-cyan-900 border-cyan-400/80 text-cyan-200 shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+              : 'bg-cyan-950/90 hover:bg-cyan-900 border-cyan-400/80 text-cyan-200'
           }`}
-          title="Escanear letrero al frente y leer en voz alta"
-          aria-label="Leer letrero al frente"
+          title="Escanear letrero u objeto al frente forzadamente"
+          aria-label="Leer señal u objeto al frente"
         >
           {isOcrProcessing ? (
             <>
@@ -581,7 +751,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
           ) : (
             <>
               <ScanText className="w-3.5 h-3.5 text-cyan-300" />
-              <span>LEER SEÑAL</span>
+              <span>LEER AHORA</span>
             </>
           )}
         </button>
