@@ -285,15 +285,8 @@ export class ObstacleScanner {
       const centerScore = (centerFloorEdges + centerFrontalEdges) * 1.25
       const rightScore = rightFloorEdges + rightFrontalEdges
 
-      // Evaluación del pasillo frontal directo (independiente de si hay un humano cruzando)
-      const centerEdgesCount = centerFloorEdges + centerFrontalEdges
-      const totalSampled = floorTotalSampled + frontalTotalSampled
-      const centerCorridorRate = totalSampled > 0 ? (centerEdgesCount * 3) / totalSampled : 0
-      const hasFrontalCorridorObstacle = centerCorridorRate > 0.022 || (centerFrontalEdges > 20 && frontalProximity > 0.10)
-
       let hazardZone: 'NONE' | 'LEFT' | 'CENTER' | 'RIGHT' = 'NONE'
       let entityType: SceneEntityType = 'NONE'
-      let secondaryContext: string | undefined = undefined
 
       if (isHuman && skinToneCount > 0) {
         const skinCenterX = skinSumX / skinToneCount
@@ -310,20 +303,9 @@ export class ObstacleScanner {
           humanZone = humanSensorSide === 'LEFT' ? 'LEFT' : 'RIGHT'
         }
 
-        // Si una persona se cruza o está por un lado, pero hay un obstáculo directamente al frente:
-        // Prioridad de vida: ¡Avisar el obstáculo al frente e informar de la persona cruzando!
-        if (humanSensorSide !== 'CENTER' && hasFrontalCorridorObstacle) {
-          entityType = 'OBJECT'
-          hazardZone = 'CENTER'
-          const personPosName = humanZone === 'LEFT' ? 'persona a tu izquierda' : 'persona a tu derecha'
-          secondaryContext = personPosName
-        } else {
-          entityType = 'HUMAN'
-          hazardZone = humanZone
-          if (hasFrontalCorridorObstacle && humanSensorSide === 'CENTER' && floorProximity > 0.20) {
-            secondaryContext = 'y obstáculo al frente'
-          }
-        }
+        // Cuando hay una persona, todo su cuerpo (rostro, cabeza, torso y hombros) es la PERSONA:
+        entityType = 'HUMAN'
+        hazardZone = humanZone
       } else if (isCable) {
         entityType = 'CABLE'
       } else if (isFrontalObject) {
@@ -372,8 +354,7 @@ export class ObstacleScanner {
 
       const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
       // Regla de Oro Asistiva: Una persona NO es un obstáculo
-      const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
-      const reportedHazard = isActualHazard || (entityType === 'HUMAN' && !!secondaryContext?.includes('obstáculo'))
+      const reportedHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
 
       // Filtro de Consenso Temporal Multicuadro (5 cuadros):
       ObstacleScanner.frameHistory.push({
@@ -403,11 +384,11 @@ export class ObstacleScanner {
       const finalHasHazard = finalEntity !== 'NONE' && reportedHazard
       const finalZone = finalEntity !== 'NONE' ? hazardZone : 'NONE'
       const finalDepth = spatialDepth
-      const finalDetails = formatSpatialAnnouncement(finalEntity, finalZone, finalDepth, secondaryContext, isOnFloor)
+      const finalDetails = formatSpatialAnnouncement(finalEntity, finalZone, finalDepth, undefined, isOnFloor)
 
       return {
         density: Math.min(1, Math.max(floorRate * 4, frontalRate * 3.5)),
-        proximityIndex: finalEntity === 'HUMAN' && !secondaryContext?.includes('obstáculo') ? 0 : proximityIndex,
+        proximityIndex: finalEntity === 'HUMAN' ? 0 : proximityIndex,
         hasHazard: finalHasHazard,
         hazardZone: finalZone,
         spatialDepth: finalDepth,
@@ -584,10 +565,6 @@ export class ObstacleScanner {
     }
     const isHuman = rawIsHuman || (!isPointingAtFloor && wasRecentlyHuman && skinToneCount >= 25 && frontalProximity >= 0.08)
 
-    // Detección de masa u obstáculo en el corredor frontal central
-    const centerEdgesCount = centerFloorEdges + centerFrontalEdges
-    const hasFrontalCorridorObstacle = centerEdgesCount > 25 || centerFrontalEdges > 18 || centerFloorEdges > 22 || centerScore > 35
-
     // Regla de Oro Anti-Confusión:
     // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
     const isCable = !isHuman && hasHazard && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.06
@@ -597,7 +574,6 @@ export class ObstacleScanner {
     const isUnclear = false
 
     let hazardZone: 'NONE' | 'LEFT' | 'CENTER' | 'RIGHT' = 'NONE'
-    let secondaryContext: string | undefined = undefined
     let entityType: SceneEntityType = 'NONE'
 
     if (isHuman && skinToneCount > 0) {
@@ -617,20 +593,9 @@ export class ObstacleScanner {
         humanZone = humanSensorSide === 'LEFT' ? 'LEFT' : 'RIGHT'
       }
 
-      // Prioridad de vida: Si un humano cruza por los lados y hay un obstáculo enfrente,
-      // ¡Avisar el obstáculo al frente e informar de la persona cruzando!
-      if (humanSensorSide !== 'CENTER' && hasFrontalCorridorObstacle) {
-        entityType = 'OBJECT'
-        hazardZone = 'CENTER'
-        const personPosName = humanZone === 'LEFT' ? 'persona a tu izquierda' : 'persona a tu derecha'
-        secondaryContext = personPosName
-      } else {
-        entityType = 'HUMAN'
-        hazardZone = humanZone
-        if (hasFrontalCorridorObstacle && humanSensorSide === 'CENTER' && floorProximity > 0.20) {
-          secondaryContext = 'y obstáculo al frente'
-        }
-      }
+      // Cuando hay una persona, todo su cuerpo (rostro, cabeza, torso y hombros) es la PERSONA:
+      entityType = 'HUMAN'
+      hazardZone = humanZone
     } else if (isCable) {
       entityType = 'CABLE'
     } else if (isFrontalObject) {
@@ -679,8 +644,7 @@ export class ObstacleScanner {
 
     const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
     // Regla de Oro Asistiva: Una persona NO es un obstáculo
-    const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
-    const reportedHazard = isActualHazard || (entityType === 'HUMAN' && !!secondaryContext?.includes('obstáculo'))
+    const reportedHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
 
     // Filtro de Consenso Temporal Multicuadro (5 cuadros):
     ObstacleScanner.frameHistory.push({
@@ -710,11 +674,11 @@ export class ObstacleScanner {
     const finalHasHazard = finalEntity !== 'NONE' && reportedHazard
     const finalZone = finalEntity !== 'NONE' ? hazardZone : 'NONE'
     const finalDepth = spatialDepth
-    const finalDetails = formatSpatialAnnouncement(finalEntity, finalZone, finalDepth, secondaryContext, isOnFloor)
+    const finalDetails = formatSpatialAnnouncement(finalEntity, finalZone, finalDepth, undefined, isOnFloor)
 
     return {
       density: Math.min(1, Math.max(floorRate * 4, frontalRate * 3.5)),
-      proximityIndex: finalEntity === 'HUMAN' && !secondaryContext?.includes('obstáculo') ? 0 : proximityIndex,
+      proximityIndex: finalEntity === 'HUMAN' ? 0 : proximityIndex,
       hasHazard: finalHasHazard,
       hazardZone: finalZone,
       spatialDepth: finalDepth,
