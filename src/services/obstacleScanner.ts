@@ -162,10 +162,21 @@ export class ObstacleScanner {
     // En oscuridad extrema aumentamos ligeramente para no detectar ruido térmico del sensor
     const effectiveThreshold = isExtremeDarkness ? Math.max(edgeThreshold, 36) : edgeThreshold
 
+    // ====================================================================
+    // REGLA FUNDAMENTAL DE PLATAFORMA:
+    // - facingMode === 'user' (WEBCAM DE COMPUTADORA): La cámara SIEMPRE mira al frente.
+    //   El 45% inferior de la imagen es el TORSO del usuario, NO el suelo.
+    //   Desactivar completamente el análisis de suelo para webcam.
+    // - facingMode === 'environment' (CÁMARA TRASERA MÓVIL): La cámara puede apuntar
+    //   al suelo, así que el análisis de suelo sí aplica.
+    // ====================================================================
+    const isFrontalWebcam = facingMode === 'user'
+
     // Límites de zonas verticales:
-    // Suelo: desde el 45% inferior de la pantalla hacia abajo
-    const floorStartRow = Math.floor(height * 0.45)
-    // Objetos frontales / entorno: desde el 10% superior hasta el inicio del suelo (45%)
+    // En webcam frontal: TODO es zona frontal (no hay suelo visible)
+    // En móvil trasera: Suelo desde 45% inferior, frontal desde 10% hasta 45%
+    const floorStartRow = isFrontalWebcam ? height + 1 : Math.floor(height * 0.45) // +1 = nunca alcanzable en webcam
+    // Objetos frontales / entorno: desde el 10% superior hasta el final (webcam) o hasta el suelo (móvil)
     const frontalStartRow = Math.floor(height * 0.10)
 
     let floorEdgeCount = 0
@@ -240,11 +251,12 @@ export class ObstacleScanner {
       const floorRate = floorTotalSampled > 0 ? floorEdgeCount / floorTotalSampled : 0
       const frontalRate = frontalTotalSampled > 0 ? frontalEdgeCount / frontalTotalSampled : 0
 
-      // Filtro de Textura Homogénea de Suelo (baldosas, parquet, terrazo, alfombra):
+      // EN WEBCAM FRONTAL: floorRate es siempre 0 porque floorStartRow es inalcanzable
+      // Filtro de Textura Homogénea de Suelo (solo aplica en móvil trasera):
       const maxFloorZone = Math.max(leftFloorEdges, centerFloorEdges, rightFloorEdges)
       const minFloorZone = Math.min(leftFloorEdges, centerFloorEdges, rightFloorEdges)
       const floorAsymmetry = minFloorZone > 5 ? maxFloorZone / minFloorZone : (maxFloorZone > 15 ? 3 : 1)
-      const isUniformFloorTexture = floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06
+      const isUniformFloorTexture = isFrontalWebcam || (floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06)
 
       // Proximidad física real calibrada
       const effectiveFloorRate = isUniformFloorTexture ? 0 : Math.max(0, floorRate - 0.015)
@@ -252,18 +264,20 @@ export class ObstacleScanner {
       const frontalProximity = Math.min(1, Math.max(0, (frontalRate - 0.012) * 11.0))
       const proximityIndex = Math.min(1, Math.max(floorProximity, frontalProximity))
 
-      // Detección de peligro activo: requiere asimetría o masa clara, NO textura homogénea de piso
+      // Detección de peligro activo:
+      // En WEBCAM: Solo se activa por objetos frontales reales (frontalRate alto)
+      // En MÓVIL: Se activa por suelo o frontal
       const hasHazard = !isUniformFloorTexture && (
         proximityIndex > 0.12 ||
         frontalRate > 0.025 ||
-        (floorRate > 0.035 && floorAsymmetry >= 1.75) ||
-        floorRate > 0.075
+        (!isFrontalWebcam && floorRate > 0.035 && floorAsymmetry >= 1.75) ||
+        (!isFrontalWebcam && floorRate > 0.075)
       )
 
       const now = performance.now()
 
-      // Si la cámara apunta hacia abajo al suelo frente al usuario:
-      const isPointingAtFloor = frontalProximity < 0.08 && floorProximity > 0.08
+      // Si la cámara apunta hacia abajo al suelo frente al usuario (IMPOSIBLE en webcam):
+      const isPointingAtFloor = !isFrontalWebcam && frontalProximity < 0.08 && floorProximity > 0.08
 
       // Detección Antropomórfica: Un humano requiere masa frontal real y concentración de piel en sector superior/medio
       const rawIsHuman = !isPointingAtFloor && skinToneCount >= 60 && frontalProximity >= 0.09
@@ -274,9 +288,9 @@ export class ObstacleScanner {
       const isHuman = rawIsHuman || (!isPointingAtFloor && wasRecentlyHuman && skinToneCount >= 25 && frontalProximity >= 0.08)
 
       // Regla de Oro Anti-Confusión:
-      // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
-      const isCable = !isHuman && hasHazard && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.06
-      // 2. OBJETO EN EL SUELO O ESTRUCTURA FRONTAL: Cajas, muebles, sillas, puertas, zapatos o bultos en suelo
+      // 1. CABLEADO: SOLO en cámara trasera móvil. Webcam NUNCA detecta cables en suelo.
+      const isCable = !isFrontalWebcam && !isHuman && hasHazard && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.06
+      // 2. OBJETO FRONTAL: En webcam solo objetos frontales reales (no el torso del usuario)
       const isFrontalObject = !isHuman && !isCable && hasHazard
       // 3. ELEMENTO NO DETERMINADO
       const isUnclear = false
@@ -297,7 +311,7 @@ export class ObstacleScanner {
         let humanZone: 'LEFT' | 'CENTER' | 'RIGHT' = 'CENTER'
         if (humanSensorSide === 'CENTER') {
           humanZone = 'CENTER'
-        } else if (facingMode === 'user') {
+        } else if (isFrontalWebcam) {
           humanZone = humanSensorSide === 'LEFT' ? 'RIGHT' : 'LEFT'
         } else {
           humanZone = humanSensorSide === 'LEFT' ? 'LEFT' : 'RIGHT'
@@ -317,7 +331,7 @@ export class ObstacleScanner {
       if (hazardZone === 'NONE' && hasHazard) {
         if (centerScore >= leftScore && centerScore >= rightScore) {
           hazardZone = 'CENTER'
-        } else if (facingMode === 'user') {
+        } else if (isFrontalWebcam) {
           hazardZone = leftScore > rightScore ? 'RIGHT' : 'LEFT'
         } else {
           hazardZone = leftScore > rightScore ? 'LEFT' : 'RIGHT'
@@ -352,7 +366,8 @@ export class ObstacleScanner {
         }
       }
 
-      const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
+      // En webcam frontal NUNCA hay suelo visible
+      const isOnFloor = !isFrontalWebcam && (floorProximity >= frontalProximity || isPointingAtFloor)
       // Regla de Oro Asistiva: Una persona NO es un obstáculo
       const reportedHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
 
@@ -515,11 +530,12 @@ export class ObstacleScanner {
     const floorRate = floorTotalSampled > 0 ? floorEdgeCount / floorTotalSampled : 0
     const frontalRate = frontalTotalSampled > 0 ? frontalEdgeCount / frontalTotalSampled : 0
 
-    // Filtro de Textura Homogénea de Suelo (baldosas, parquet, terrazo, alfombra):
+    // EN WEBCAM FRONTAL: floorRate es siempre 0 porque floorStartRow es inalcanzable
+    // Filtro de Textura Homogénea de Suelo (solo aplica en móvil trasera):
     const maxFloorZone = Math.max(leftFloorEdges, centerFloorEdges, rightFloorEdges)
     const minFloorZone = Math.min(leftFloorEdges, centerFloorEdges, rightFloorEdges)
     const floorAsymmetry = minFloorZone > 5 ? maxFloorZone / minFloorZone : (maxFloorZone > 15 ? 3 : 1)
-    const isUniformFloorTexture = floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06
+    const isUniformFloorTexture = isFrontalWebcam || (floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06)
 
     // Proximidad física real calibrada
     const effectiveFloorRate = isUniformFloorTexture ? 0 : Math.max(0, floorRate - 0.015)
@@ -527,12 +543,14 @@ export class ObstacleScanner {
     const frontalProximity = Math.min(1, Math.max(0, (frontalRate - 0.012) * 11.0))
     const proximityIndex = Math.min(1, Math.max(floorProximity, frontalProximity))
 
-    // Detección de peligro activo: requiere asimetría o masa clara, NO textura homogénea de piso
+    // Detección de peligro activo:
+    // En WEBCAM: Solo se activa por objetos frontales reales
+    // En MÓVIL: Se activa por suelo o frontal
     const hasHazard = !isUniformFloorTexture && (
       proximityIndex > 0.12 ||
       frontalRate > 0.025 ||
-      (floorRate > 0.035 && floorAsymmetry >= 1.75) ||
-      floorRate > 0.075
+      (!isFrontalWebcam && floorRate > 0.035 && floorAsymmetry >= 1.75) ||
+      (!isFrontalWebcam && floorRate > 0.075)
     )
 
     // Clasificación de la naturaleza del obstáculo
@@ -554,8 +572,8 @@ export class ObstacleScanner {
 
     const now = performance.now()
 
-    // Si la cámara apunta hacia abajo al suelo frente al usuario:
-    const isPointingAtFloor = frontalProximity < 0.08 && floorProximity > 0.08
+    // Si la cámara apunta hacia abajo al suelo frente al usuario (IMPOSIBLE en webcam):
+    const isPointingAtFloor = !isFrontalWebcam && frontalProximity < 0.08 && floorProximity > 0.08
 
     // Detección Antropomórfica: Un humano requiere masa frontal real y concentración de piel en sector superior/medio
     const rawIsHuman = !isPointingAtFloor && skinToneCount >= 60 && frontalProximity >= 0.09
@@ -566,9 +584,9 @@ export class ObstacleScanner {
     const isHuman = rawIsHuman || (!isPointingAtFloor && wasRecentlyHuman && skinToneCount >= 25 && frontalProximity >= 0.08)
 
     // Regla de Oro Anti-Confusión:
-    // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
-    const isCable = !isHuman && hasHazard && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.06
-    // 2. OBJETO EN EL SUELO O ESTRUCTURA FRONTAL: Cajas, muebles, sillas, puertas, zapatos o bultos en suelo
+    // 1. CABLEADO: SOLO en cámara trasera móvil. Webcam NUNCA detecta cables en suelo.
+    const isCable = !isFrontalWebcam && !isHuman && hasHazard && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.06
+    // 2. OBJETO FRONTAL: En webcam solo objetos frontales reales (no el torso del usuario)
     const isFrontalObject = !isHuman && !isCable && hasHazard
     // 3. ELEMENTO NO DETERMINADO
     const isUnclear = false
@@ -585,7 +603,7 @@ export class ObstacleScanner {
       let humanZone: 'LEFT' | 'CENTER' | 'RIGHT' = 'CENTER'
       if (humanSensorSide === 'CENTER') {
         humanZone = 'CENTER'
-      } else if (facingMode === 'user') {
+      } else if (isFrontalWebcam) {
         // Vista tipo espejo (Webcam PC): sensor izquierdo es DERECHA física del usuario
         humanZone = humanSensorSide === 'LEFT' ? 'RIGHT' : 'LEFT'
       } else {
@@ -607,7 +625,7 @@ export class ObstacleScanner {
     if (hazardZone === 'NONE' && hasHazard) {
       if (centerScore >= leftScore && centerScore >= rightScore) {
         hazardZone = 'CENTER'
-      } else if (facingMode === 'user') {
+      } else if (isFrontalWebcam) {
         hazardZone = leftScore > rightScore ? 'RIGHT' : 'LEFT'
       } else {
         hazardZone = leftScore > rightScore ? 'LEFT' : 'RIGHT'
@@ -642,7 +660,8 @@ export class ObstacleScanner {
       }
     }
 
-    const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
+    // En webcam frontal NUNCA hay suelo visible
+    const isOnFloor = !isFrontalWebcam && (floorProximity >= frontalProximity || isPointingAtFloor)
     // Regla de Oro Asistiva: Una persona NO es un obstáculo
     const reportedHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
 
