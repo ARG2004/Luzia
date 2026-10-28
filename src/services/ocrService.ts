@@ -498,23 +498,17 @@ export class OcrService {
       }
     }
 
-    // Filtro de ruido severo: si la confianza es < 35%, descartar totalmente (silencio)
-    if (!matchedKeyword && confidence < 35) {
+    // DIRECTIVA ANTI-ALUCINACIÓN ESTRICTA (Cero falsos letreros en suelos o texturas):
+    // Si la confianza es < 58% y no se detectó una palabra clave de emergencia real (SALIDA, PELIGRO, etc.),
+    // descartar totalmente. NUNCA inventar "letrero no claro" ni "gafete" ante suelo, ropa o muebles.
+    if (!matchedKeyword && (confidence < 58 || cleanText.length < 3)) {
       return null
     }
 
     const shape = detectedShape || { shape: 'GENERAL_OBJECT' as const, label: 'Objeto al frente' }
     let isUnclear = false
     let finalSpeech = guidanceMessage
-
-    // DIRECTIVA ANTI-ALUCINACIÓN PARA TEXTOS DUDOSOS O NO CLAROS (35% a 54%):
-    // Nunca adivinar palabras incompletas. Informar con precisión al usuario que acerque o enfoque.
-    if (!matchedKeyword && confidence < 55) {
-      isUnclear = true
-      finalSpeech = isHumanPresent
-        ? 'Persona al frente. Texto no claro; acerque o enfoque el gafete.'
-        : 'Letrero al frente no claro. Acerque la cámara o active la linterna.'
-    } else if (!finalSpeech) {
+    if (!finalSpeech) {
       if (isHumanPresent) {
         // NUNCA decir que la persona es un gafete o señal: es una PERSONA con gafete/identificación
         if (shape.shape === 'CARD_BADGE' || shape.shape === 'CIRCULAR_EMBLEM') {

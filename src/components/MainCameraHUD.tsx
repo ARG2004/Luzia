@@ -488,55 +488,54 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
                 scanCanvas = sourceCanvas
               }
 
-              if (scanCanvas) {
+              // Si la cámara apunta hacia abajo al suelo, no ejecutar OCR sobre baldosas o alfombras
+              const isCameraPointingAtFloor = obstacleAnalysis.floorDensity > 0.09 && obstacleAnalysis.frontalDensity < 0.08
+
+              const emitAutopilotSpeech = (speechToAnnounce: string | null) => {
+                if (speechToAnnounce && speechToAnnounce !== 'Suelo y entorno despejados') {
+                  const nowMs = Date.now()
+                  const isSame = speechToAnnounce.toLowerCase().trim() === lastAnnouncedTextRef.current.toLowerCase().trim()
+                  const timeSince = nowMs - lastAnnouncedTimeRef.current
+
+                  const isHumanAnnouncement = speechToAnnounce.toLowerCase().includes('persona')
+                  const minInterval = isHumanAnnouncement ? 7000 : 4000
+                  const repeatCooldown = isHumanAnnouncement ? 18000 : 9500
+
+                  if (timeSince >= minInterval && (!isSame || timeSince > repeatCooldown)) {
+                    lastAnnouncedTextRef.current = speechToAnnounce
+                    lastAnnouncedTimeRef.current = nowMs
+                    if (!isHumanAnnouncement) {
+                      AudioFeedbackService.playSuccessChime()
+                      HapticsService.signDetected()
+                    }
+                    TtsService.speak(speechToAnnounce, true)
+                    setQuickOcrFeedback(`"${speechToAnnounce}"`)
+                    setTimeout(() => setQuickOcrFeedback(null), 3500)
+                  }
+                }
+              }
+
+              if (scanCanvas && !isCameraPointingAtFloor) {
                 const currentEntity = obstacleAnalysis.entityType || 'NONE'
                 const isHumanDetected = currentEntity === 'HUMAN'
 
                 OcrService.recognizeText(scanCanvas, undefined, isHumanDetected).then(result => {
                   let speechToAnnounce: string | null = null
 
-                  if (result && result.text && result.text.length >= 2) {
-                    if (result.isUnclear) {
-                      speechToAnnounce = result.guidanceMessage || (isHumanDetected ? 'Persona al frente. Texto no claro; acerque el gafete.' : 'Letrero al frente no claro.')
-                    } else if (result.confidence >= 55) {
-                      speechToAnnounce = result.guidanceMessage || `Texto: ${result.text}`
-                      onSignProcessedRef.current?.(result)
-                    } else {
-                      // Si la confianza del texto es baja, priorizar la orientación espacial física (humano, objeto o cableado)
-                      speechToAnnounce = currentEntity !== 'NONE' ? obstacleAnalysis.detectedDetails : null
-                    }
+                  if (result && result.text && (result.confidence >= 58 || result.matchedEmergencyKeyword) && !result.isUnclear) {
+                    speechToAnnounce = result.guidanceMessage || `Texto: ${result.text}`
+                    onSignProcessedRef.current?.(result)
                   } else {
-                    // Si no hay texto, anunciar la orientación espacial precisa (dirección y distancia real):
+                    // Si no hay texto claro legible, anunciar la orientación física real (cableado u objeto)
                     if (currentEntity !== 'NONE') {
                       speechToAnnounce = obstacleAnalysis.detectedDetails
                     }
                   }
-
-                  if (speechToAnnounce && speechToAnnounce !== 'Suelo y entorno despejados') {
-                    const nowMs = Date.now()
-                    const isSame = speechToAnnounce.toLowerCase().trim() === lastAnnouncedTextRef.current.toLowerCase().trim()
-                    const timeSince = nowMs - lastAnnouncedTimeRef.current
-
-                    // Regla de Oro "Sin Enloquecer", "Sin Alucinación" y Modo Exposición/Audiencia:
-                    // Una persona NO es un obstáculo: en ferias o exposiciones con público observando,
-                    // la presencia humana se anuncia de forma discreta sin interrumpir la presentación.
-                    const isHumanAnnouncement = speechToAnnounce.toLowerCase().includes('persona')
-                    const minInterval = isHumanAnnouncement ? 7000 : 4000
-                    const repeatCooldown = isHumanAnnouncement ? 18000 : 9500
-
-                    if (timeSince >= minInterval && (!isSame || timeSince > repeatCooldown)) {
-                      lastAnnouncedTextRef.current = speechToAnnounce
-                      lastAnnouncedTimeRef.current = nowMs
-                      if (!isHumanAnnouncement) {
-                        AudioFeedbackService.playSuccessChime()
-                        HapticsService.signDetected()
-                      }
-                      TtsService.speak(speechToAnnounce, true)
-                      setQuickOcrFeedback(`"${speechToAnnounce}"`)
-                      setTimeout(() => setQuickOcrFeedback(null), 3500)
-                    }
-                  }
+                  emitAutopilotSpeech(speechToAnnounce)
                 }).catch(() => {})
+              } else if (isCameraPointingAtFloor && obstacleAnalysis.entityType !== 'NONE') {
+                // Cámara apuntando al suelo: Anunciar únicamente obstáculos físicos reales (cables u objetos en el piso)
+                emitAutopilotSpeech(obstacleAnalysis.detectedDetails)
               }
             }
           }

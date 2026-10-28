@@ -54,7 +54,6 @@ export function formatSpatialAnnouncement(
   entity: SceneEntityType,
   zone: 'CENTER' | 'LEFT' | 'RIGHT' | 'NONE',
   depth: SpatialDepth = 'CENTER',
-  isCrouched = false,
   secondaryContext?: string
 ): string {
   if (entity === 'NONE') return 'Suelo y entorno despejados'
@@ -77,7 +76,7 @@ export function formatSpatialAnnouncement(
   let base = ''
   switch (entity) {
     case 'HUMAN':
-      base = isCrouched ? `Persona agachada ${posText}` : `Persona ${posText}`
+      base = `Persona ${posText}`
       break
     case 'CABLE':
       base = `Precaución: Cableado en el suelo ${posText}`
@@ -177,9 +176,10 @@ export class ObstacleScanner {
     const colOneThird = Math.floor(width / 3)
     const colTwoThirds = Math.floor((width * 2) / 3)
 
-    // Zona de muestreo humano panorámica vertical completa (de pie, sentada o agachada en el suelo)
-    const bodySampleRowStart = Math.floor(height * 0.02)
-    const bodySampleRowEnd = Math.floor(height * 0.96)
+    // Zona de muestreo humano estricta: Únicamente sector superior/medio (cabeza, cuello, pecho, torso)
+    // NUNCA muestrear el tercio inferior del suelo (baldosas, madera, alfombras, calzado)
+    const bodySampleRowStart = Math.floor(height * 0.05)
+    const bodySampleRowEnd = Math.floor(height * 0.58)
 
     let skinToneCount = 0
     let skinSumX = 0
@@ -237,23 +237,22 @@ export class ObstacleScanner {
 
       const now = performance.now()
 
-      // Detección Antropomórfica Robusta (de pie, alejándose o agachándose):
-      const rawIsHuman = skinToneCount >= 18
-      const wasRecentlyHuman = now - ObstacleScanner.lastHumanDetectedTime < 3800
+      // Si la cámara apunta hacia abajo al suelo frente al usuario:
+      const isPointingAtFloor = frontalProximity < 0.08 && floorProximity > 0.08
+
+      // Detección Antropomórfica: Un humano requiere masa frontal real y concentración de piel en sector superior/medio
+      const rawIsHuman = !isPointingAtFloor && skinToneCount >= 60 && frontalProximity >= 0.09
+      const wasRecentlyHuman = now - ObstacleScanner.lastHumanDetectedTime < 2400
       if (rawIsHuman) {
         ObstacleScanner.lastHumanDetectedTime = now
       }
-      // Si la persona estaba en el visor y se agacha o sienta en el suelo:
-      const isHuman = rawIsHuman || (wasRecentlyHuman && (skinToneCount >= 7 || floorProximity > 0.15))
-
-      const skinCenterY = skinToneCount > 0 ? skinSumY / skinToneCount : 0
-      const isCrouched = isHuman && (skinCenterY > height * 0.46 || (floorProximity > 0.16 && frontalProximity < 0.12))
+      const isHuman = rawIsHuman || (!isPointingAtFloor && wasRecentlyHuman && skinToneCount >= 25 && frontalProximity >= 0.08)
 
       // Regla de Oro Anti-Confusión:
       // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
       const isCable = !isHuman && floorProximity > 0.12 && frontalProximity < 0.06 && floorRate < 0.08
-      // 2. OBJETO / ESTRUCTURA: Mesas, muebles, sillas, puertas, paredes
-      const isFrontalObject = !isHuman && (frontalProximity > 0.10 || (floorProximity > 0.15 && frontalProximity > 0.08))
+      // 2. OBJETO / ESTRUCTURA: Mesas, muebles, sillas, puertas, o bultos en suelo
+      const isFrontalObject = !isHuman && (frontalProximity > 0.10 || (floorProximity > 0.15 && floorRate >= 0.08))
       // 3. ELEMENTO NO DETERMINADO: Si hay peligro pero no clasifica inequívocamente
       const isUnclear = hasHazard && !isHuman && !isCable && !isFrontalObject
 
@@ -346,7 +345,7 @@ export class ObstacleScanner {
         }
       }
 
-      const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, isCrouched, secondaryContext)
+      const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext)
 
       // Regla de Oro Asistiva: Una persona NO es un obstáculo
       const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
@@ -508,17 +507,16 @@ export class ObstacleScanner {
 
     const now = performance.now()
 
-    // Detección Antropomórfica Robusta (de pie, alejándose o agachándose):
-    const rawIsHuman = skinToneCount >= 18
-    const wasRecentlyHuman = now - ObstacleScanner.lastHumanDetectedTime < 3800
+    // Si la cámara apunta hacia abajo al suelo frente al usuario:
+    const isPointingAtFloor = frontalProximity < 0.08 && floorProximity > 0.08
+
+    // Detección Antropomórfica: Un humano requiere masa frontal real y concentración de piel en sector superior/medio
+    const rawIsHuman = !isPointingAtFloor && skinToneCount >= 60 && frontalProximity >= 0.09
+    const wasRecentlyHuman = now - ObstacleScanner.lastHumanDetectedTime < 2400
     if (rawIsHuman) {
       ObstacleScanner.lastHumanDetectedTime = now
     }
-    // Si la persona estaba en el visor y se agacha o sienta en el suelo:
-    const isHuman = rawIsHuman || (wasRecentlyHuman && (skinToneCount >= 7 || floorProximity > 0.15))
-
-    const skinCenterY = skinToneCount > 0 ? skinSumY / skinToneCount : 0
-    const isCrouched = isHuman && (skinCenterY > height * 0.46 || (floorProximity > 0.16 && frontalProximity < 0.12))
+    const isHuman = rawIsHuman || (!isPointingAtFloor && wasRecentlyHuman && skinToneCount >= 25 && frontalProximity >= 0.08)
 
     // Detección de masa u obstáculo en el corredor frontal central
     const centerEdgesCount = centerFloorEdges + centerFrontalEdges
@@ -527,8 +525,8 @@ export class ObstacleScanner {
     // Regla de Oro Anti-Confusión:
     // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
     const isCable = !isHuman && floorProximity > 0.12 && frontalProximity < 0.06 && floorRate < 0.08
-    // 2. OBJETO / ESTRUCTURA: Mesas, muebles, sillas, puertas, paredes
-    const isFrontalObject = !isHuman && (frontalProximity > 0.10 || (floorProximity > 0.15 && frontalProximity > 0.08))
+    // 2. OBJETO / ESTRUCTURA: Mesas, muebles, sillas, puertas, o bultos en suelo
+    const isFrontalObject = !isHuman && (frontalProximity > 0.10 || (floorProximity > 0.15 && floorRate >= 0.08))
     // 3. ELEMENTO NO DETERMINADO: Si hay peligro pero no clasifica inequívocamente
     const isUnclear = hasHazard && !isHuman && !isCable && !isFrontalObject
 
@@ -613,7 +611,7 @@ export class ObstacleScanner {
       }
     }
 
-    const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, isCrouched, secondaryContext)
+    const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext)
 
     // Regla de Oro Asistiva: Una persona NO es un obstáculo
     const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
