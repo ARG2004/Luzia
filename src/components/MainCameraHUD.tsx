@@ -499,7 +499,7 @@ export const MainCameraHUD: React.FC<MainCameraHUDProps> = ({
 
                   const isHumanAnnouncement = speechToAnnounce.toLowerCase().includes('persona')
                   const minInterval = isHumanAnnouncement ? 7000 : 4000
-                  const repeatCooldown = isHumanAnnouncement ? 18000 : 9500
+                  const repeatCooldown = isHumanAnnouncement ? 24000 : 20000
 
                   if (timeSince >= minInterval && (!isSame || timeSince > repeatCooldown)) {
                     lastAnnouncedTextRef.current = speechToAnnounce

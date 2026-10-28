@@ -101,8 +101,16 @@ export function formatSpatialAnnouncement(
   return base
 }
 
+interface FrameObservation {
+  entity: SceneEntityType
+  zone: 'NONE' | 'LEFT' | 'CENTER' | 'RIGHT'
+  depth: SpatialDepth
+  hasHazard: boolean
+}
+
 export class ObstacleScanner {
   private static lastHumanDetectedTime = 0
+  private static frameHistory: FrameObservation[] = []
   /**
    * Aplica convolución de bordes (filtro Sobel optimizado) tanto en el sector inferior (suelo, cables, desniveles)
    * como en el sector medio/superior (objetos al frente, muebles, paredes, personas a su alrededor).
@@ -231,10 +239,26 @@ export class ObstacleScanner {
 
       const floorRate = floorTotalSampled > 0 ? floorEdgeCount / floorTotalSampled : 0
       const frontalRate = frontalTotalSampled > 0 ? frontalEdgeCount / frontalTotalSampled : 0
-      const floorProximity = Math.min(1, Math.max(0, (floorRate - 0.008) * 12.0))
-      const frontalProximity = Math.min(1, Math.max(0, (frontalRate - 0.009) * 11.0))
+
+      // Filtro de Textura Homogénea de Suelo (baldosas, parquet, terrazo, alfombra):
+      const maxFloorZone = Math.max(leftFloorEdges, centerFloorEdges, rightFloorEdges)
+      const minFloorZone = Math.min(leftFloorEdges, centerFloorEdges, rightFloorEdges)
+      const floorAsymmetry = minFloorZone > 5 ? maxFloorZone / minFloorZone : (maxFloorZone > 15 ? 3 : 1)
+      const isUniformFloorTexture = floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06
+
+      // Proximidad física real calibrada
+      const effectiveFloorRate = isUniformFloorTexture ? 0 : Math.max(0, floorRate - 0.015)
+      const floorProximity = Math.min(1, Math.max(0, effectiveFloorRate * 12.0))
+      const frontalProximity = Math.min(1, Math.max(0, (frontalRate - 0.012) * 11.0))
       const proximityIndex = Math.min(1, Math.max(floorProximity, frontalProximity))
-      const hasHazard = proximityIndex > 0.08 || floorRate > 0.015 || frontalRate > 0.018
+
+      // Detección de peligro activo: requiere asimetría o masa clara, NO textura homogénea de piso
+      const hasHazard = !isUniformFloorTexture && (
+        proximityIndex > 0.12 ||
+        frontalRate > 0.025 ||
+        (floorRate > 0.035 && floorAsymmetry >= 1.75) ||
+        floorRate > 0.075
+      )
 
       const now = performance.now()
 
@@ -251,9 +275,9 @@ export class ObstacleScanner {
 
       // Regla de Oro Anti-Confusión:
       // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
-      const isCable = !isHuman && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.08
+      const isCable = !isHuman && hasHazard && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.06
       // 2. OBJETO EN EL SUELO O ESTRUCTURA FRONTAL: Cajas, muebles, sillas, puertas, zapatos o bultos en suelo
-      const isFrontalObject = !isHuman && !isCable && (hasHazard || frontalProximity > 0.08 || floorProximity > 0.10)
+      const isFrontalObject = !isHuman && !isCable && hasHazard
       // 3. ELEMENTO NO DETERMINADO
       const isUnclear = false
 
@@ -347,25 +371,53 @@ export class ObstacleScanner {
       }
 
       const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
-      const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext, isOnFloor)
-
       // Regla de Oro Asistiva: Una persona NO es un obstáculo
       const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
       const reportedHazard = isActualHazard || (entityType === 'HUMAN' && !!secondaryContext?.includes('obstáculo'))
 
+      // Filtro de Consenso Temporal Multicuadro (5 cuadros):
+      ObstacleScanner.frameHistory.push({
+        entity: entityType,
+        zone: hazardZone,
+        depth: spatialDepth,
+        hasHazard: reportedHazard,
+      })
+      if (ObstacleScanner.frameHistory.length > 5) {
+        ObstacleScanner.frameHistory.shift()
+      }
+
+      const entityTally = new Map<SceneEntityType, number>()
+      for (const obs of ObstacleScanner.frameHistory) {
+        entityTally.set(obs.entity, (entityTally.get(obs.entity) || 0) + 1)
+      }
+
+      let stableEntity: SceneEntityType = 'NONE'
+      for (const [ent, count] of entityTally.entries()) {
+        if (ent !== 'NONE' && count >= 3) {
+          stableEntity = ent
+          break
+        }
+      }
+
+      const finalEntity = stableEntity
+      const finalHasHazard = finalEntity !== 'NONE' && reportedHazard
+      const finalZone = finalEntity !== 'NONE' ? hazardZone : 'NONE'
+      const finalDepth = spatialDepth
+      const finalDetails = formatSpatialAnnouncement(finalEntity, finalZone, finalDepth, secondaryContext, isOnFloor)
+
       return {
         density: Math.min(1, Math.max(floorRate * 4, frontalRate * 3.5)),
-        proximityIndex: entityType === 'HUMAN' && !secondaryContext?.includes('obstáculo') ? 0 : proximityIndex,
-        hasHazard: reportedHazard,
-        hazardZone,
-        spatialDepth,
-        hazardType: reportedHazard
+        proximityIndex: finalEntity === 'HUMAN' && !secondaryContext?.includes('obstáculo') ? 0 : proximityIndex,
+        hasHazard: finalHasHazard,
+        hazardZone: finalZone,
+        spatialDepth: finalDepth,
+        hazardType: finalHasHazard
           ? (floorProximity > 0.15 && frontalProximity > 0.15 ? 'MULTIPLE' : floorProximity > 0.15 ? 'FLOOR_OBSTACLE' : 'FRONTAL_OBJECT')
           : 'NONE',
         floorDensity: floorProximity,
         frontalDensity: frontalProximity,
-        entityType,
-        detectedDetails,
+        entityType: finalEntity,
+        detectedDetails: finalDetails,
         meanLuminance,
         isExtremeDarkness,
       }
@@ -482,13 +534,25 @@ export class ObstacleScanner {
     const floorRate = floorTotalSampled > 0 ? floorEdgeCount / floorTotalSampled : 0
     const frontalRate = frontalTotalSampled > 0 ? frontalEdgeCount / frontalTotalSampled : 0
 
-    // Calibración de sensibilidad realista para navegación asistiva accesible:
-    const floorProximity = Math.min(1, Math.max(0, (floorRate - 0.008) * 12.0))
-    const frontalProximity = Math.min(1, Math.max(0, (frontalRate - 0.009) * 11.0))
+    // Filtro de Textura Homogénea de Suelo (baldosas, parquet, terrazo, alfombra):
+    const maxFloorZone = Math.max(leftFloorEdges, centerFloorEdges, rightFloorEdges)
+    const minFloorZone = Math.min(leftFloorEdges, centerFloorEdges, rightFloorEdges)
+    const floorAsymmetry = minFloorZone > 5 ? maxFloorZone / minFloorZone : (maxFloorZone > 15 ? 3 : 1)
+    const isUniformFloorTexture = floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06
+
+    // Proximidad física real calibrada
+    const effectiveFloorRate = isUniformFloorTexture ? 0 : Math.max(0, floorRate - 0.015)
+    const floorProximity = Math.min(1, Math.max(0, effectiveFloorRate * 12.0))
+    const frontalProximity = Math.min(1, Math.max(0, (frontalRate - 0.012) * 11.0))
     const proximityIndex = Math.min(1, Math.max(floorProximity, frontalProximity))
 
-    // Detección de peligro activo
-    const hasHazard = proximityIndex > 0.08 || floorRate > 0.015 || frontalRate > 0.018
+    // Detección de peligro activo: requiere asimetría o masa clara, NO textura homogénea de piso
+    const hasHazard = !isUniformFloorTexture && (
+      proximityIndex > 0.12 ||
+      frontalRate > 0.025 ||
+      (floorRate > 0.035 && floorAsymmetry >= 1.75) ||
+      floorRate > 0.075
+    )
 
     // Clasificación de la naturaleza del obstáculo
     let hazardType: 'NONE' | 'FLOOR_OBSTACLE' | 'FRONTAL_OBJECT' | 'MULTIPLE' = 'NONE'
@@ -526,9 +590,9 @@ export class ObstacleScanner {
 
     // Regla de Oro Anti-Confusión:
     // 1. CABLEADO: Solo si NO hay persona, es una línea delgada en suelo y no hay masa frontal
-    const isCable = !isHuman && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.08
+    const isCable = !isHuman && hasHazard && floorProximity > 0.10 && frontalProximity < 0.06 && floorRate < 0.06
     // 2. OBJETO EN EL SUELO O ESTRUCTURA FRONTAL: Cajas, muebles, sillas, puertas, zapatos o bultos en suelo
-    const isFrontalObject = !isHuman && !isCable && (hasHazard || frontalProximity > 0.08 || floorProximity > 0.10)
+    const isFrontalObject = !isHuman && !isCable && hasHazard
     // 3. ELEMENTO NO DETERMINADO
     const isUnclear = false
 
@@ -614,23 +678,51 @@ export class ObstacleScanner {
     }
 
     const isOnFloor = floorProximity >= frontalProximity || isPointingAtFloor
-    const detectedDetails = formatSpatialAnnouncement(entityType, hazardZone, spatialDepth, secondaryContext, isOnFloor)
-
     // Regla de Oro Asistiva: Una persona NO es un obstáculo
     const isActualHazard = (entityType === 'OBJECT' || entityType === 'CABLE' || entityType === 'UNCLEAR') && hasHazard
     const reportedHazard = isActualHazard || (entityType === 'HUMAN' && !!secondaryContext?.includes('obstáculo'))
 
+    // Filtro de Consenso Temporal Multicuadro (5 cuadros):
+    ObstacleScanner.frameHistory.push({
+      entity: entityType,
+      zone: hazardZone,
+      depth: spatialDepth,
+      hasHazard: reportedHazard,
+    })
+    if (ObstacleScanner.frameHistory.length > 5) {
+      ObstacleScanner.frameHistory.shift()
+    }
+
+    const entityTally = new Map<SceneEntityType, number>()
+    for (const obs of ObstacleScanner.frameHistory) {
+      entityTally.set(obs.entity, (entityTally.get(obs.entity) || 0) + 1)
+    }
+
+    let stableEntity: SceneEntityType = 'NONE'
+    for (const [ent, count] of entityTally.entries()) {
+      if (ent !== 'NONE' && count >= 3) {
+        stableEntity = ent
+        break
+      }
+    }
+
+    const finalEntity = stableEntity
+    const finalHasHazard = finalEntity !== 'NONE' && reportedHazard
+    const finalZone = finalEntity !== 'NONE' ? hazardZone : 'NONE'
+    const finalDepth = spatialDepth
+    const finalDetails = formatSpatialAnnouncement(finalEntity, finalZone, finalDepth, secondaryContext, isOnFloor)
+
     return {
       density: Math.min(1, Math.max(floorRate * 4, frontalRate * 3.5)),
-      proximityIndex: entityType === 'HUMAN' && !secondaryContext?.includes('obstáculo') ? 0 : proximityIndex,
-      hasHazard: reportedHazard,
-      hazardZone,
-      spatialDepth,
-      hazardType: reportedHazard ? hazardType : 'NONE',
+      proximityIndex: finalEntity === 'HUMAN' && !secondaryContext?.includes('obstáculo') ? 0 : proximityIndex,
+      hasHazard: finalHasHazard,
+      hazardZone: finalZone,
+      spatialDepth: finalDepth,
+      hazardType: finalHasHazard ? hazardType : 'NONE',
       floorDensity: floorProximity,
       frontalDensity: frontalProximity,
-      entityType,
-      detectedDetails,
+      entityType: finalEntity,
+      detectedDetails: finalDetails,
       meanLuminance,
       isExtremeDarkness,
     }
