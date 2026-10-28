@@ -204,6 +204,10 @@ export class ObstacleScanner {
     let skinToneCount = 0
     let skinSumX = 0
     let skinSumY = 0
+    let minSkinX = width
+    let maxSkinX = 0
+    let minSkinY = height
+    let maxSkinY = 0
 
     // Modo RAW (Óptica directa): copia imagen y realiza análisis numérico
     if (mode === 'RAW') {
@@ -220,6 +224,10 @@ export class ObstacleScanner {
               skinToneCount++
               skinSumX += x
               skinSumY += y
+              if (x < minSkinX) minSkinX = x
+              if (x > maxSkinX) maxSkinX = x
+              if (y < minSkinY) minSkinY = y
+              if (y > maxSkinY) maxSkinY = y
             }
           }
 
@@ -256,7 +264,14 @@ export class ObstacleScanner {
       const maxFloorZone = Math.max(leftFloorEdges, centerFloorEdges, rightFloorEdges)
       const minFloorZone = Math.min(leftFloorEdges, centerFloorEdges, rightFloorEdges)
       const floorAsymmetry = minFloorZone > 5 ? maxFloorZone / minFloorZone : (maxFloorZone > 15 ? 3 : 1)
-      const isUniformFloorTexture = isFrontalWebcam || (floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06)
+      
+      // En móvil trasera: Si las líneas de textura se extienden uniformemente entre suelo y frente (alfombra/colcha/baldosas)
+      const isContinuousFloorPlane = !isFrontalWebcam && (
+        floorRate > 0.025 &&
+        frontalRate > 0.02 &&
+        Math.abs(floorRate - frontalRate) < 0.045
+      )
+      const isUniformFloorTexture = isFrontalWebcam || (floorAsymmetry < 1.75 && frontalRate < 0.025 && floorRate < 0.06) || (isContinuousFloorPlane && floorAsymmetry < 1.85)
 
       // Proximidad física real calibrada
       const effectiveFloorRate = isUniformFloorTexture ? 0 : Math.max(0, floorRate - 0.015)
@@ -279,13 +294,38 @@ export class ObstacleScanner {
       // Si la cámara apunta hacia abajo al suelo frente al usuario (IMPOSIBLE en webcam):
       const isPointingAtFloor = !isFrontalWebcam && frontalProximity < 0.08 && floorProximity > 0.08
 
-      // Detección Antropomórfica: Un humano requiere masa frontal real y concentración de piel en sector superior/medio
-      const rawIsHuman = !isPointingAtFloor && skinToneCount >= 60 && frontalProximity >= 0.09
-      const wasRecentlyHuman = now - ObstacleScanner.lastHumanDetectedTime < 2400
-      if (rawIsHuman) {
-        ObstacleScanner.lastHumanDetectedTime = now
+      // Detección Antropomórfica diferenciada por plataforma:
+      let isHuman = false
+
+      if (isFrontalWebcam) {
+        // EN WEBCAM DE COMPUTADORA: Preservar 100% intacta la calibración web
+        const rawIsHuman = !isPointingAtFloor && skinToneCount >= 60 && frontalProximity >= 0.09
+        const wasRecentlyHuman = now - ObstacleScanner.lastHumanDetectedTime < 2400
+        if (rawIsHuman) {
+          ObstacleScanner.lastHumanDetectedTime = now
+        }
+        isHuman = rawIsHuman || (!isPointingAtFloor && wasRecentlyHuman && skinToneCount >= 25 && frontalProximity >= 0.08)
+      } else {
+        // EN CÁMARA TRASERA MÓVIL: Calibración antropomórfica rigurosa anti-alfombras y anti-suelo
+        // 1. Un piso de madera, alfombra, colcha o pared tiene píxeles cálidos dispersos por todo el ancho
+        const skinSpanX = maxSkinX - minSkinX
+        const skinSpanY = maxSkinY - minSkinY
+        const isDispersedSurfaceColor = skinSpanX > width * 0.48 || skinSpanY > height * 0.52
+
+        // 2. Si la cámara enfoca un plano continuo con rayas/textura de piso, NUNCA es un humano
+        // 3. Un humano real en cámara móvil tiene una masa compacta localizada en la mitad superior
+        const isCompactCluster = !isDispersedSurfaceColor && skinToneCount >= 140
+        const isUpperHalfDominant = skinToneCount > 0 && (skinSumY / skinToneCount) < height * 0.45
+
+        const mobileIsHuman = !isContinuousFloorPlane && isCompactCluster && isUpperHalfDominant && frontalProximity >= 0.12
+
+        if (mobileIsHuman) {
+          ObstacleScanner.lastHumanDetectedTime = now
+          isHuman = true
+        } else {
+          isHuman = false
+        }
       }
-      const isHuman = rawIsHuman || (!isPointingAtFloor && wasRecentlyHuman && skinToneCount >= 25 && frontalProximity >= 0.08)
 
       // Regla de Oro Anti-Confusión:
       // 1. CABLEADO: SOLO en cámara trasera móvil. Webcam NUNCA detecta cables en suelo.
@@ -439,6 +479,10 @@ export class ObstacleScanner {
               skinToneCount++
               skinSumX += x
               skinSumY += y
+              if (x < minSkinX) minSkinX = x
+              if (x > maxSkinX) maxSkinX = x
+              if (y < minSkinY) minSkinY = y
+              if (y > maxSkinY) maxSkinY = y
             }
           }
         }
